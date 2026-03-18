@@ -1,0 +1,17 @@
+# Build outputs
+bin/
+obj/
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# Publish output
+publish/
+
+# Debug files
+*.pdb
+
+# Config files created at runtime
+hwmon_config.json
