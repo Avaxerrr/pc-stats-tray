@@ -36,7 +36,8 @@ namespace HwMonTray
             _computer = computer;
             _hiddenSensors = LoadConfig();
 
-            Text = "Hardware Monitor — Sensor Details";
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "Unknown";
+            Text = $"Hardware Monitor — Sensor Details (v{version})";
             Size = new Size(820, 560);
             MinimumSize = new Size(600, 350);
             StartPosition = FormStartPosition.CenterScreen;
@@ -121,7 +122,7 @@ namespace HwMonTray
 
             var titleLabel = new Label
             {
-                Text = "SENSOR DATA",
+                Text = $"SENSOR DATA  —  v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}",
                 ForeColor = FgDim,
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 AutoSize = true,

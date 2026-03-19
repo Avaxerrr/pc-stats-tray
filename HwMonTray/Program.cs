@@ -27,6 +27,17 @@ namespace HwMonTray
         private static System.Windows.Forms.Timer timer = null!;
         private static DetailsForm? detailsForm;
 
+        // Temperature tracking for tooltip stats
+        private static float cpuMinTemp = float.MaxValue;
+        private static float cpuMaxTemp = float.MinValue;
+        private static double cpuSumTemp = 0;
+        private static long cpuTempCount = 0;
+
+        private static float gpuMinTemp = float.MaxValue;
+        private static float gpuMaxTemp = float.MinValue;
+        private static double gpuSumTemp = 0;
+        private static long gpuTempCount = 0;
+
         [STAThread]
         static void Main()
         {
@@ -219,11 +230,30 @@ namespace HwMonTray
                 }
             }
 
-            string cpuTrayText = $"CPU: {maxCpuTemp:0}°C — Right-click for details";
+            if (maxCpuTemp > 0)
+            {
+                if (maxCpuTemp < cpuMinTemp) cpuMinTemp = maxCpuTemp;
+                if (maxCpuTemp > cpuMaxTemp) cpuMaxTemp = maxCpuTemp;
+                cpuSumTemp += maxCpuTemp;
+                cpuTempCount++;
+            }
+
+            if (maxGpuTemp > 0)
+            {
+                if (maxGpuTemp < gpuMinTemp) gpuMinTemp = maxGpuTemp;
+                if (maxGpuTemp > gpuMaxTemp) gpuMaxTemp = maxGpuTemp;
+                gpuSumTemp += maxGpuTemp;
+                gpuTempCount++;
+            }
+
+            float cpuAvg = cpuTempCount > 0 ? (float)(cpuSumTemp / cpuTempCount) : 0;
+            float gpuAvg = gpuTempCount > 0 ? (float)(gpuSumTemp / gpuTempCount) : 0;
+
+            string cpuTrayText = $"CPU: {maxCpuTemp:0}°C | Min: {(cpuMinTemp == float.MaxValue ? 0 : cpuMinTemp):0}° | Max: {(cpuMaxTemp == float.MinValue ? 0 : cpuMaxTemp):0}° | Avg: {cpuAvg:0}°";
             if (cpuTrayText.Length >= 64) cpuTrayText = cpuTrayText.Substring(0, 63);
             cpuTrayIcon.Text = cpuTrayText;
 
-            string gpuTrayText = $"GPU: {maxGpuTemp:0}°C — Right-click for details";
+            string gpuTrayText = $"GPU: {maxGpuTemp:0}°C | Min: {(gpuMinTemp == float.MaxValue ? 0 : gpuMinTemp):0}° | Max: {(gpuMaxTemp == float.MinValue ? 0 : gpuMaxTemp):0}° | Avg: {gpuAvg:0}°";
             if (gpuTrayText.Length >= 64) gpuTrayText = gpuTrayText.Substring(0, 63);
             gpuTrayIcon.Text = gpuTrayText;
 
