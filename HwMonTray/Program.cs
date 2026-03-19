@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -127,17 +126,12 @@ namespace HwMonTray
         {
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "schtasks.exe",
-                    Arguments = $"/query /tn \"{TaskName}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true
-                };
-                using var p = Process.Start(psi);
-                p?.WaitForExit();
-                return p?.ExitCode == 0;
+                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
+                dynamic ts = Activator.CreateInstance(type)!;
+                ts.Connect();
+                dynamic folder = ts.GetFolder("\\");
+                var task = folder.GetTask(TaskName);
+                return task != null;
             }
             catch { return false; }
         }
@@ -146,30 +140,40 @@ namespace HwMonTray
         {
             try
             {
-                bool exists = IsStartupTaskConfigured();
-                string args;
-                
-                if (exists)
+                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
+                dynamic ts = Activator.CreateInstance(type)!;
+                ts.Connect();
+                dynamic folder = ts.GetFolder("\\");
+
+                if (IsStartupTaskConfigured())
                 {
-                    args = $"/delete /tn \"{TaskName}\" /f";
+                    folder.DeleteTask(TaskName, 0);
                 }
                 else
                 {
-                    string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? Application.ExecutablePath;
-                    args = $"/create /tn \"{TaskName}\" /tr \"\\\"{exePath}\\\"\" /sc onlogon /rl highest /f";
-                }
+                    dynamic taskDef = ts.NewTask(0);
+                    taskDef.RegistrationInfo.Description = "Hardware Monitor Tray Icon Startup";
+                    
+                    // Trigger: Logon (type 9)
+                    dynamic trigger = taskDef.Triggers.Create(9);
+                    
+                    // Action: Run exe (type 0)
+                    dynamic action = taskDef.Actions.Create(0);
+                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? Application.ExecutablePath;
+                    action.Path = exePath;
+                    action.WorkingDirectory = System.IO.Path.GetDirectoryName(exePath);
 
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "schtasks.exe",
-                    Arguments = args,
-                    UseShellExecute = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    Verb = "runas" // Request elevation (though we should already be admin)
-                };
-                
-                using var p = Process.Start(psi);
-                p?.WaitForExit();
+                    // Run with highest privileges (bypasses UAC on boot)
+                    taskDef.Principal.RunLevel = 1;
+
+                    // Critical for laptops: allow running on battery
+                    taskDef.Settings.DisallowStartIfOnBatteries = false;
+                    taskDef.Settings.StopIfGoingOnBatteries = false;
+                    taskDef.Settings.ExecutionTimeLimit = "PT0S"; // No time limit
+
+                    // Register: CreateOrUpdate (6), InteractiveToken (3)
+                    folder.RegisterTaskDefinition(TaskName, taskDef, 6, null, null, 3, null);
+                }
             }
             catch (Exception ex)
             {
