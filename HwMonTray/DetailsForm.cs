@@ -17,8 +17,7 @@ namespace HwMonTray
         private DataGridView _grid = null!;
         private HashSet<string> _hiddenSensors;
         private IHardware? _selectedHardware;
-        private static readonly string ConfigPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "hwmon_config.json");
+        private static string ConfigPath => Program.ConfigPath;
 
         // Dark theme colors
         private static readonly Color BgDark = Color.FromArgb(20, 20, 20);
@@ -486,7 +485,7 @@ namespace HwMonTray
                 if (File.Exists(ConfigPath))
                 {
                     string json = File.ReadAllText(ConfigPath);
-                    var cfg = JsonSerializer.Deserialize<AppConfig>(json);
+                    var cfg = JsonSerializer.Deserialize<Program.AppConfigFull>(json);
                     return cfg?.HiddenSensors != null
                         ? new HashSet<string>(cfg.HiddenSensors)
                         : new HashSet<string>();
@@ -500,7 +499,17 @@ namespace HwMonTray
         {
             try
             {
-                var cfg = new AppConfig { HiddenSensors = hidden.ToList() };
+                Program.AppConfigFull cfg;
+                if (File.Exists(ConfigPath))
+                {
+                    string existing = File.ReadAllText(ConfigPath);
+                    cfg = JsonSerializer.Deserialize<Program.AppConfigFull>(existing) ?? new Program.AppConfigFull();
+                }
+                else
+                {
+                    cfg = new Program.AppConfigFull();
+                }
+                cfg.HiddenSensors = hidden.ToList();
                 string json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(ConfigPath, json);
             }
@@ -529,11 +538,6 @@ namespace HwMonTray
             public string Display { get; }
             public SensorFilterItem(string key, string display) { Key = key; Display = display; }
             public override string ToString() => Display;
-        }
-
-        private class AppConfig
-        {
-            public List<string> HiddenSensors { get; set; } = new();
         }
     }
 }

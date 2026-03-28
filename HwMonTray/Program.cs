@@ -1,6 +1,10 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -27,6 +31,11 @@ namespace HwMonTray
         private static System.Windows.Forms.Timer timer = null!;
         private static DetailsForm? detailsForm;
 
+        // OSD Overlay
+        private static OverlayForm? overlayForm;
+        private static OverlayConfig overlayConfig = null!;
+        private static HotkeyWindow? hotkeyWindow;
+
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
         private static float cpuMaxTemp = float.MinValue;
@@ -37,6 +46,10 @@ namespace HwMonTray
         private static float gpuMaxTemp = float.MinValue;
         private static double gpuSumTemp = 0;
         private static long gpuTempCount = 0;
+
+        // Config path (shared with DetailsForm)
+        internal static readonly string ConfigPath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "hwmon_config.json");
 
         [STAThread]
         static void Main()
@@ -66,6 +79,9 @@ namespace HwMonTray
                 return;
             }
 
+            // Load overlay config
+            overlayConfig = LoadOverlayConfig();
+
             contextMenu = new ContextMenuStrip();
             PopulateInitialMenu();
 
@@ -82,6 +98,14 @@ namespace HwMonTray
                 ContextMenuStrip = contextMenu,
                 Visible = true
             };
+
+            // Create overlay (hidden by default)
+            overlayForm = new OverlayForm(computer, overlayConfig);
+
+            // Register global hotkey
+            hotkeyWindow = new HotkeyWindow();
+            hotkeyWindow.HotkeyPressed += OnHotkeyPressed;
+            RegisterCurrentHotkey();
 
             UpdateData();
 
@@ -116,6 +140,19 @@ namespace HwMonTray
                 detailsForm.BringToFront();
             });
 
+            // OSD overlay menu items
+            contextMenu.Items.Add(new ToolStripSeparator());
+
+            var toggleOsdItem = new ToolStripMenuItem($"Toggle OSD  ({overlayConfig.HotkeyDisplay})");
+            toggleOsdItem.Click += (s, e) => ToggleOverlay();
+            contextMenu.Items.Add(toggleOsdItem);
+
+            contextMenu.Items.Add("OSD Settings…", null, (s, e) =>
+            {
+                var settingsForm = new OverlaySettingsForm(overlayConfig, OnOverlayConfigSaved);
+                settingsForm.ShowDialog();
+            });
+
             contextMenu.Items.Add(new ToolStripSeparator());
 
             var startupItem = new ToolStripMenuItem("Run at Startup");
@@ -130,6 +167,123 @@ namespace HwMonTray
             contextMenu.Items.Add(new ToolStripSeparator());
             contextMenu.Items.Add("Exit", null, (s, e) => Application.Exit());
         }
+
+        // ── OSD Overlay ──────────────────────────────────────────────
+
+        private static void ToggleOverlay()
+        {
+            if (overlayForm == null || overlayForm.IsDisposed)
+            {
+                overlayForm = new OverlayForm(computer, overlayConfig);
+            }
+
+            if (overlayForm.Visible)
+            {
+                overlayForm.Hide();
+                overlayConfig.Enabled = false;
+            }
+            else
+            {
+                overlayForm.Show();
+                overlayForm.RefreshData();
+                overlayConfig.Enabled = true;
+            }
+
+            SaveOverlayConfig(overlayConfig);
+        }
+
+        private static void OnHotkeyPressed()
+        {
+            ToggleOverlay();
+        }
+
+        private static void OnOverlayConfigSaved(OverlayConfig config)
+        {
+            overlayConfig = config;
+
+            // Re-register hotkey with new combo
+            UnregisterCurrentHotkey();
+            RegisterCurrentHotkey();
+
+            // Update overlay
+            if (overlayForm != null && !overlayForm.IsDisposed)
+            {
+                overlayForm.UpdateConfig(config);
+            }
+
+            SaveOverlayConfig(config);
+
+            // Refresh context menu to show new hotkey
+            PopulateInitialMenu();
+        }
+
+        private static void RegisterCurrentHotkey()
+        {
+            if (hotkeyWindow != null && overlayConfig.HotkeyVk != 0)
+            {
+                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 1,
+                    (uint)overlayConfig.HotkeyModifiers, (uint)overlayConfig.HotkeyVk);
+            }
+        }
+
+        private static void UnregisterCurrentHotkey()
+        {
+            if (hotkeyWindow != null)
+            {
+                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 1);
+            }
+        }
+
+        // ── Overlay Config Persistence ───────────────────────────────
+
+        private static OverlayConfig LoadOverlayConfig()
+        {
+            try
+            {
+                if (File.Exists(ConfigPath))
+                {
+                    string json = File.ReadAllText(ConfigPath);
+                    var cfg = JsonSerializer.Deserialize<AppConfigFull>(json);
+                    if (cfg?.Overlay != null)
+                        return cfg.Overlay;
+                }
+            }
+            catch { }
+            return new OverlayConfig();
+        }
+
+        internal static void SaveOverlayConfig(OverlayConfig overlay)
+        {
+            try
+            {
+                AppConfigFull cfg;
+                if (File.Exists(ConfigPath))
+                {
+                    string existing = File.ReadAllText(ConfigPath);
+                    cfg = JsonSerializer.Deserialize<AppConfigFull>(existing) ?? new AppConfigFull();
+                }
+                else
+                {
+                    cfg = new AppConfigFull();
+                }
+
+                cfg.Overlay = overlay;
+                string json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(ConfigPath, json);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Full config model that includes both sensor filter settings and overlay settings.
+        /// </summary>
+        internal class AppConfigFull
+        {
+            public List<string> HiddenSensors { get; set; } = new();
+            public OverlayConfig? Overlay { get; set; }
+        }
+
+        // ── Hotkey Window ────────────────────────────────────────────
 
         private const string TaskName = "HwMonTray_Startup";
 
@@ -172,7 +326,7 @@ namespace HwMonTray
                     dynamic action = taskDef.Actions.Create(0);
                     string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? Application.ExecutablePath;
                     action.Path = exePath;
-                    action.WorkingDirectory = System.IO.Path.GetDirectoryName(exePath);
+                    action.WorkingDirectory = Path.GetDirectoryName(exePath);
 
                     // Run with highest privileges (bypasses UAC on boot)
                     taskDef.Principal.RunLevel = 1;
@@ -204,6 +358,9 @@ namespace HwMonTray
         {
             computer.Accept(new UpdateVisitor());
             UpdateIcon();
+
+            // Refresh overlay if visible
+            overlayForm?.RefreshData();
         }
 
         private static void UpdateIcon()
@@ -343,11 +500,20 @@ namespace HwMonTray
             return path;
         }
 
-        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
         extern static bool DestroyIcon(IntPtr handle);
 
         private static void CleanUp()
         {
+            UnregisterCurrentHotkey();
+            hotkeyWindow?.DestroyHandle();
+
+            if (overlayForm != null && !overlayForm.IsDisposed)
+            {
+                overlayForm.Close();
+                overlayForm.Dispose();
+            }
+
             if (cpuTrayIcon != null)
             {
                 cpuTrayIcon.Visible = false;
@@ -362,6 +528,36 @@ namespace HwMonTray
             {
                 computer.Close();
             }
+        }
+    }
+
+    /// <summary>
+    /// Invisible NativeWindow that listens for WM_HOTKEY messages.
+    /// </summary>
+    internal class HotkeyWindow : NativeWindow
+    {
+        private const int WM_HOTKEY = 0x0312;
+
+        public event Action? HotkeyPressed;
+
+        [DllImport("user32.dll")]
+        public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        public HotkeyWindow()
+        {
+            CreateHandle(new CreateParams());
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_HOTKEY)
+            {
+                HotkeyPressed?.Invoke();
+            }
+            base.WndProc(ref m);
         }
     }
 }
