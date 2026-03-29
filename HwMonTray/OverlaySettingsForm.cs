@@ -337,7 +337,7 @@ namespace HwMonTray
             string? previousMetricGroup = null;
             foreach (var metric in _config.Metrics)
             {
-                string group = GetMetricGroupLabel(metric.Key);
+                string group = OverlaySettingsOptionHelper.GetMetricGroupLabel(metric.Key);
                 if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
                 {
                     metricsHeight += metricGroupHeaderHeight;
@@ -354,7 +354,7 @@ namespace HwMonTray
             for (int i = 0; i < _config.Metrics.Count; i++)
             {
                 var metric = _config.Metrics[i];
-                string group = GetMetricGroupLabel(metric.Key);
+                string group = OverlaySettingsOptionHelper.GetMetricGroupLabel(metric.Key);
                 if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
                 {
                     metricsCard.Controls.Add(MakeSectionLabel(group, Ui(16), metricY));
@@ -453,54 +453,33 @@ namespace HwMonTray
 
         private void CommitConfig()
         {
-            if (!_capturedToggleHotkey.IsEmpty)
+            var state = new OverlaySettingsState
             {
-                _config.HotkeyDisplay = _capturedToggleHotkey.Display;
-                _config.HotkeyModifiers = _capturedToggleHotkey.Modifiers;
-                _config.HotkeyVk = _capturedToggleHotkey.VirtualKey;
-            }
-
-            if (!_capturedSettingsHotkey.IsEmpty)
-            {
-                _config.SettingsHotkeyDisplay = _capturedSettingsHotkey.Display;
-                _config.SettingsHotkeyModifiers = _capturedSettingsHotkey.Modifiers;
-                _config.SettingsHotkeyVk = _capturedSettingsHotkey.VirtualKey;
-            }
-
-            _config.Enabled = _enabledCheck.Checked;
-            _config.DesktopOverlayEnabled = _desktopOverlayCheck.Checked;
-            _config.RtssOverlayEnabled = _rtssOverlayCheck.Checked;
-            _config.Position = (_alignRight, _alignBottom) switch
-            {
-                (false, false) => "TopLeft",
-                (true, false) => "TopRight",
-                (false, true) => "BottomLeft",
-                (true, true) => "BottomRight"
+                ToggleHotkey = _capturedToggleHotkey,
+                SettingsHotkey = _capturedSettingsHotkey,
+                Enabled = _enabledCheck.Checked,
+                DesktopOverlayEnabled = _desktopOverlayCheck.Checked,
+                RtssOverlayEnabled = _rtssOverlayCheck.Checked,
+                AlignRight = _alignRight,
+                AlignBottom = _alignBottom,
+                OffsetX = _horizontalMarginSlider.Value,
+                OffsetY = _verticalMarginSlider.Value,
+                OpacityPercent = _opacitySlider.Value,
+                FontSize = _fontSlider.Value,
+                FontFamily = _fontFamilyBox.SelectedItem?.ToString() ?? _config.FontFamily,
+                HasBackground = _backgroundModeBox.SelectedIndex != 1,
+                ShowTextShadow = _shadowCheck.Checked,
+                ShowBorder = _borderCheck.Checked,
+                ShowTextOutline = _outlineCheck.Checked,
+                TextOutlineThickness = _outlineThicknessSlider.Value,
+                ShowRamAsPercentage = _ramDisplayModeBox.SelectedIndex == 1,
+                CpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_cpuFanSensorBox.SelectedItem),
+                GpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_gpuFanSensorBox.SelectedItem),
+                CaseFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_caseFanSensorBox.SelectedItem),
+                MetricEnabledStates = _metricChecks.Select(check => check.Checked).ToArray()
             };
 
-            _config.OffsetX = _horizontalMarginSlider.Value;
-            _config.OffsetY = _verticalMarginSlider.Value;
-            _config.Opacity = _opacitySlider.Value / 100f;
-            _config.FontSize = _fontSlider.Value;
-            _config.FontFamily = _fontFamilyBox.SelectedItem?.ToString() ?? _config.FontFamily;
-            _config.BackgroundMode = _backgroundModeBox.SelectedIndex == 1
-                ? OverlayConfig.BackgroundNone
-                : OverlayConfig.BackgroundSolid;
-            _config.ShowTextShadow = _shadowCheck.Checked;
-            _config.ShowBorder = _borderCheck.Checked;
-            _config.ShowTextOutline = _outlineCheck.Checked;
-            _config.TextOutlineThickness = _outlineThicknessSlider.Value;
-            _config.RamDisplayMode = _ramDisplayModeBox.SelectedIndex == 1
-                ? OverlayConfig.RamDisplayPercentage
-                : OverlayConfig.RamDisplayUsedAndTotal;
-            _config.CpuFanSensorKey = GetSelectedFanSensorKey(_cpuFanSensorBox);
-            _config.GpuFanSensorKey = GetSelectedFanSensorKey(_gpuFanSensorBox);
-            _config.CaseFanSensorKey = GetSelectedFanSensorKey(_caseFanSensorBox);
-
-            for (int i = 0; i < _metricChecks.Length && i < _config.Metrics.Count; i++)
-            {
-                _config.Metrics[i].Enabled = _metricChecks[i].Checked;
-            }
+            OverlaySettingsConfigMapper.Apply(_config, state);
         }
 
         private void UpdateAppearanceState()
@@ -860,17 +839,9 @@ namespace HwMonTray
         private void PopulateFanSensorChoice(ComboBox comboBox, string selectedKey)
         {
             comboBox.Items.Clear();
-            comboBox.Items.Add(new FanSensorOption(string.Empty, "Auto detect"));
-
-            foreach (var option in _fanSensorOptions)
+            foreach (var option in OverlaySettingsOptionHelper.BuildFanSensorItems(_fanSensorOptions, selectedKey))
             {
                 comboBox.Items.Add(option);
-            }
-
-            if (!string.IsNullOrWhiteSpace(selectedKey) &&
-                !_fanSensorOptions.Any(option => string.Equals(option.Key, selectedKey, StringComparison.OrdinalIgnoreCase)))
-            {
-                comboBox.Items.Add(new FanSensorOption(selectedKey, "Missing sensor"));
             }
 
             comboBox.SelectedItem = comboBox.Items
@@ -879,26 +850,6 @@ namespace HwMonTray
                 ?? comboBox.Items[0];
 
             comboBox.Enabled = comboBox.Items.Count > 0;
-        }
-
-        private static string GetSelectedFanSensorKey(ComboBox comboBox)
-        {
-            return comboBox.SelectedItem is FanSensorOption option ? option.Key : string.Empty;
-        }
-
-        private static string GetMetricGroupLabel(string key)
-        {
-            if (key.StartsWith("Cpu", StringComparison.OrdinalIgnoreCase))
-            {
-                return "CPU";
-            }
-
-            if (key.StartsWith("Gpu", StringComparison.OrdinalIgnoreCase))
-            {
-                return "GPU";
-            }
-
-            return "System";
         }
 
         private void RestoreWindowBounds()
