@@ -6,7 +6,6 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -150,7 +149,7 @@ namespace HwMonTray
                 }
             }
 
-            CollectFanMetrics();
+            FanSensorResolver.PopulateFanMetrics(_computer, _config, _currentValues);
 
             RecalcSize();
             RepositionOnScreen();
@@ -163,26 +162,7 @@ namespace HwMonTray
 
         public string BuildOsdText()
         {
-            var metrics = GetVisibleMetrics();
-            if (metrics.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            var builder = new StringBuilder();
-            foreach (var (label, value, _) in metrics)
-            {
-                if (builder.Length > 0)
-                {
-                    builder.AppendLine();
-                }
-
-                builder.Append(label);
-                builder.Append(": ");
-                builder.Append(value);
-            }
-
-            return builder.ToString();
+            return OverlayTextFormatter.BuildOsdText(_config, _currentValues);
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -326,155 +306,9 @@ namespace HwMonTray
             }
         }
 
-        private void CollectFanMetrics()
+        private List<OverlayMetricDisplay> GetVisibleMetrics()
         {
-            ISensor? cpuFan = null;
-            ISensor? gpuFan = null;
-            ISensor? caseFan = null;
-
-            var fanSensors = new Dictionary<string, ISensor>(StringComparer.OrdinalIgnoreCase);
-            foreach (var hardware in _computer.Hardware)
-            {
-                CollectFanSensorsByKeyRecursive(hardware, fanSensors);
-            }
-
-            cpuFan = ResolveConfiguredFan(_config.CpuFanSensorKey, fanSensors);
-            gpuFan = ResolveConfiguredFan(_config.GpuFanSensorKey, fanSensors);
-            caseFan = ResolveConfiguredFan(_config.CaseFanSensorKey, fanSensors);
-
-            foreach (var hardware in _computer.Hardware)
-            {
-                CollectFanMetricsRecursive(hardware, ref cpuFan, ref gpuFan, ref caseFan);
-            }
-
-            if (cpuFan?.Value.HasValue == true)
-            {
-                _currentValues["CpuFan"] = $"{cpuFan.Value.Value:0} RPM";
-            }
-
-            if (gpuFan?.Value.HasValue == true)
-            {
-                _currentValues["GpuFan"] = $"{gpuFan.Value.Value:0} RPM";
-            }
-
-            if (caseFan?.Value.HasValue == true)
-            {
-                _currentValues["CaseFan"] = $"{caseFan.Value.Value:0} RPM";
-            }
-        }
-
-        private void CollectFanSensorsByKeyRecursive(IHardware hardware, Dictionary<string, ISensor> fanSensors)
-        {
-            foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Fan))
-            {
-                fanSensors[SensorIdentity.GetSensorKey(sensor)] = sensor;
-            }
-
-            foreach (var subHardware in hardware.SubHardware)
-            {
-                CollectFanSensorsByKeyRecursive(subHardware, fanSensors);
-            }
-        }
-
-        private ISensor? ResolveConfiguredFan(string sensorKey, Dictionary<string, ISensor> fanSensors)
-        {
-            if (string.IsNullOrWhiteSpace(sensorKey))
-            {
-                return null;
-            }
-
-            if (fanSensors.TryGetValue(sensorKey, out var sensor) && sensor.Value.HasValue)
-            {
-                return sensor;
-            }
-
-            return null;
-        }
-
-        private void CollectFanMetricsRecursive(IHardware hardware, ref ISensor? cpuFan, ref ISensor? gpuFan, ref ISensor? caseFan)
-        {
-            foreach (var sensor in hardware.Sensors.Where(s => s.SensorType == SensorType.Fan && s.Value.HasValue))
-            {
-                AssignFanSensor(hardware, sensor, ref cpuFan, ref gpuFan, ref caseFan);
-            }
-
-            foreach (var subHardware in hardware.SubHardware)
-            {
-                CollectFanMetricsRecursive(subHardware, ref cpuFan, ref gpuFan, ref caseFan);
-            }
-        }
-
-        private void AssignFanSensor(IHardware hardware, ISensor sensor, ref ISensor? cpuFan, ref ISensor? gpuFan, ref ISensor? caseFan)
-        {
-            FanRole role = ClassifyFanSensor(hardware, sensor);
-            switch (role)
-            {
-                case FanRole.Cpu when cpuFan == null:
-                    cpuFan = sensor;
-                    break;
-                case FanRole.Gpu when gpuFan == null:
-                    gpuFan = sensor;
-                    break;
-                case FanRole.Case when caseFan == null:
-                    caseFan = sensor;
-                    break;
-            }
-        }
-
-        private FanRole ClassifyFanSensor(IHardware hardware, ISensor sensor)
-        {
-            string sensorName = sensor.Name ?? string.Empty;
-            string hardwareName = hardware.Name ?? string.Empty;
-            string parentName = hardware.Parent?.Name ?? string.Empty;
-            string combined = $"{sensorName} {hardwareName} {parentName}".ToLowerInvariant();
-
-            if (hardware.HardwareType is HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel ||
-                combined.Contains("gpu") || combined.Contains("geforce") || combined.Contains("radeon"))
-            {
-                return FanRole.Gpu;
-            }
-
-            if (sensorName.Contains("CPU", StringComparison.OrdinalIgnoreCase) ||
-                sensorName.Contains("Processor", StringComparison.OrdinalIgnoreCase) ||
-                hardware.HardwareType == HardwareType.Cpu)
-            {
-                return FanRole.Cpu;
-            }
-
-            if (combined.Contains("chassis") ||
-                combined.Contains("case") ||
-                combined.Contains("system fan") ||
-                combined.Contains("sys fan") ||
-                combined.Contains("aux fan") ||
-                combined.Contains("rear fan") ||
-                combined.Contains("front fan"))
-            {
-                return FanRole.Case;
-            }
-
-            if (hardware.HardwareType is HardwareType.Motherboard or HardwareType.SuperIO or HardwareType.EmbeddedController)
-            {
-                return FanRole.Case;
-            }
-
-            return FanRole.Unknown;
-        }
-
-        private List<(string label, string value, string key)> GetVisibleMetrics()
-        {
-            var result = new List<(string, string, string)>();
-            foreach (var metric in _config.Metrics)
-            {
-                if (!metric.Enabled)
-                {
-                    continue;
-                }
-
-                string value = _currentValues.TryGetValue(metric.Key, out var currentValue) ? currentValue : "--";
-                result.Add((metric.Label, value, metric.Key));
-            }
-
-            return result;
+            return OverlayTextFormatter.GetVisibleMetrics(_config, _currentValues);
         }
 
         private void RecalcSize()
@@ -499,10 +333,10 @@ namespace HwMonTray
 
             float maxLabelWidth = 0f;
             float maxValueWidth = 0f;
-            foreach (var (label, value, _) in metrics)
+            foreach (var metric in metrics)
             {
-                maxLabelWidth = Math.Max(maxLabelWidth, g.MeasureString(label.ToUpperInvariant(), _labelFont!, PointF.Empty, StringFormat.GenericTypographic).Width);
-                maxValueWidth = Math.Max(maxValueWidth, g.MeasureString(value, _metricFont!, PointF.Empty, StringFormat.GenericTypographic).Width);
+                maxLabelWidth = Math.Max(maxLabelWidth, g.MeasureString(metric.Label.ToUpperInvariant(), _labelFont!, PointF.Empty, StringFormat.GenericTypographic).Width);
+                maxValueWidth = Math.Max(maxValueWidth, g.MeasureString(metric.Value, _metricFont!, PointF.Empty, StringFormat.GenericTypographic).Width);
             }
 
             int contentWidth = (int)Math.Ceiling(maxLabelWidth + gap + maxValueWidth + (padding * 2));
@@ -571,14 +405,14 @@ namespace HwMonTray
                 using var fmtRight = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
 
                 int currentY = padding;
-                foreach (var (rawLabel, value, key) in metrics)
+                foreach (var metric in metrics)
                 {
-                    string label = rawLabel.ToUpperInvariant();
+                    string label = metric.Label.ToUpperInvariant();
                     var rowRectLeft = new RectangleF(padding, currentY, Width - (padding * 2), rowHeight);
                     var rowRectRight = new RectangleF(padding, currentY, Width - (padding * 2), rowHeight);
 
                     DrawText(g, label, _labelFont!, ApplyOpacity(Color.FromArgb(168, 174, 186)), rowRectLeft, fmtLeft, false);
-                    DrawText(g, value, _metricFont!, ApplyOpacity(GetValueColor(key, value)), rowRectRight, fmtRight, true);
+                    DrawText(g, metric.Value, _metricFont!, ApplyOpacity(GetValueColor(metric.Key, metric.Value)), rowRectRight, fmtRight, true);
 
                     currentY += rowHeight;
                 }
@@ -817,14 +651,6 @@ namespace HwMonTray
             }
 
             base.Dispose(disposing);
-        }
-
-        private enum FanRole
-        {
-            Unknown,
-            Cpu,
-            Gpu,
-            Case
         }
     }
 }

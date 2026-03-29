@@ -2,9 +2,9 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -49,10 +49,7 @@ namespace HwMonTray
         private static float gpuMaxTemp = float.MinValue;
         private static double gpuSumTemp = 0;
         private static long gpuTempCount = 0;
-
-        // Config path (shared with DetailsForm)
-        internal static readonly string ConfigPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "hwmon_config.json");
+        internal static readonly string ConfigPath = AppConfigStore.DefaultPath;
 
         [STAThread]
         static void Main()
@@ -84,7 +81,7 @@ namespace HwMonTray
             }
 
             // Load overlay config
-            overlayConfig = LoadOverlayConfig();
+            overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
             contextMenu = new ContextMenuStrip();
             PopulateInitialMenu();
@@ -189,7 +186,7 @@ namespace HwMonTray
             overlayConfig.Enabled = !overlayConfig.Enabled;
 
             ApplyOverlayOutputs();
-            SaveOverlayConfig(overlayConfig);
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
         }
 
         private static void OnHotkeyPressed(int hotkeyId)
@@ -220,7 +217,7 @@ namespace HwMonTray
             }
 
             ApplyOverlayOutputs();
-            SaveOverlayConfig(config);
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, config);
 
             // Refresh context menu to show new hotkey
             PopulateInitialMenu();
