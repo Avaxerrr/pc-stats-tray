@@ -33,8 +33,7 @@
 
         <h1>Hardware<br>Monitoring.</h1>
         <p class="lead">
-          A lightweight, low-overhead Windows utility that keeps your system vitals visible exactly where they are needed:
-          the system tray, a desktop overlay, or inside supported games through RTSS.
+          A Windows utility that shows hardware stats in the tray icon, on the desktop, and inside supported games through RTSS.
         </p>
 
         <div class="actions">
@@ -43,7 +42,7 @@
         </div>
 
         <ul class="tech-list">
-          <li>Live CPU and GPU temperature readouts in the tray icon by default</li>
+          <li>Separate CPU and GPU temperature tray icons</li>
           <li>Customizable desktop OSD with font, shadow, outline, and layout controls</li>
           <li>Direct integration with RivaTuner Statistics Server for in-game overlays</li>
         </ul>
@@ -63,7 +62,7 @@
           <li>Run <code>PCStatsTray.exe</code>.</li>
           <li>Right-click the tray icon and open <code>OSD Settings</code>.</li>
           <li>Turn on <code>Desktop OSD</code> for desktop metrics.</li>
-          <li>Turn on <code>RTSS OSD</code> for in-game output if RTSS is installed and running.</li>
+          <li>Turn on <code>RTSS OSD (Games)</code> for in-game output if RTSS is installed and running.</li>
         </ol>
       </div>
 
@@ -71,8 +70,8 @@
         <p class="eyebrow">Architecture</p>
         <h2>The RTSS Bridge</h2>
         <p class="panel-copy">
-          PC Stats Tray collects the hardware data, formats the text, and decides what should be displayed.
-          RTSS (RivaTuner Statistics Server) is the renderer that draws those stats inside supported games.
+          PC Stats Tray collects the hardware data, formats the text, and chooses what should be displayed.
+          RTSS (RivaTuner Statistics Server) is the separate renderer that draws those stats inside supported games.
         </p>
         <p class="panel-copy">
           To enable the in-game overlay, make sure RTSS is running in the background and
@@ -84,25 +83,25 @@
     <section class="features">
       <div class="section-head">
         <p class="eyebrow">Feature Set</p>
-        <h2>Fast Visibility, Low Friction</h2>
+        <h2>Main Features</h2>
       </div>
 
       <div class="feature-grid">
         <div class="panel feature-card">
           <h3>Tray Stats</h3>
-          <p>Keep a live hardware readout visible in the tray without opening a full dashboard.</p>
+          <p>Show CPU and GPU temperatures directly in the tray.</p>
         </div>
         <div class="panel feature-card">
           <h3>Desktop OSD</h3>
-          <p>Pin your chosen metrics to the desktop with customizable text, layout, and styling.</p>
+          <p>Show the selected metrics on the desktop with configurable text, layout, and styling.</p>
         </div>
         <div class="panel feature-card">
           <h3>RTSS Output</h3>
-          <p>Send the same metrics into supported games through RTSS with built-in debug visibility.</p>
+          <p>Send the selected metrics to RTSS for supported in-game overlays.</p>
         </div>
         <div class="panel feature-card">
           <h3>Quick Control</h3>
-          <p>Open settings or toggle the overlay quickly with hotkeys and tray actions.</p>
+          <p>Open settings or toggle the OSD with hotkeys and tray menu actions.</p>
         </div>
       </div>
     </section>
@@ -110,7 +109,7 @@
     <section class="showcase">
       <div class="showcase-head">
         <p class="eyebrow">Visual Output</p>
-        <h2>Unobtrusive Overlays</h2>
+        <h2>Overlay and Settings</h2>
       </div>
 
       <div class="shots">
@@ -120,7 +119,7 @@
           </div>
           <div class="shot-info">
             <strong>Desktop OSD Layer</strong>
-            <span>Pin vital stats to your desktop with a compact overlay that stays readable without taking over the screen.</span>
+            <span>Show the selected hardware metrics on the desktop overlay.</span>
           </div>
         </div>
 
@@ -130,7 +129,7 @@
           </div>
           <div class="shot-info">
             <strong>Configuration</strong>
-            <span>Direct access to output mode, hotkeys, layout controls, and metric toggles without bloated UI layers.</span>
+            <span>Configure output mode, hotkeys, layout, styling, and metric selection.</span>
           </div>
         </div>
       </div>
