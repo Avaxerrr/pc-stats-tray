@@ -17,7 +17,10 @@ namespace PCStatsTray.Tests
                 var overlay = new OverlayConfig
                 {
                     Enabled = false,
-                    FontFamily = "Bahnschrift"
+                    FontFamily = "Bahnschrift",
+                    DesktopHotkeyDisplay = "Ctrl+Shift+D",
+                    RtssHotkeyDisplay = "Ctrl+Shift+R",
+                    VramDisplayMode = OverlayConfig.VramDisplayPercentage
                 };
 
                 AppConfigStore.SaveOverlayConfig(path, overlay);
@@ -28,6 +31,9 @@ namespace PCStatsTray.Tests
                 CollectionAssert.AreEquivalent(new[] { "cpu/temp", "gpu/temp" }, hiddenSensors.ToArray());
                 Assert.IsFalse(reloadedOverlay.Enabled);
                 Assert.AreEqual("Bahnschrift", reloadedOverlay.FontFamily);
+                Assert.AreEqual("Ctrl+Shift+D", reloadedOverlay.DesktopHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Shift+R", reloadedOverlay.RtssHotkeyDisplay);
+                Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
             }
             finally
             {

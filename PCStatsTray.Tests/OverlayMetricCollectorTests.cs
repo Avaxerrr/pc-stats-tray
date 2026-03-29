@@ -20,5 +20,21 @@ namespace PCStatsTray.Tests
 
             Assert.AreEqual("12 / 16 GB", value);
         }
+
+        [TestMethod]
+        public void FormatVramUsage_ReturnsPercentage_WhenRequested()
+        {
+            string value = OverlayMetricCollector.FormatVramUsage(4096f, 8192f, showPercentage: true);
+
+            Assert.AreEqual("50%", value);
+        }
+
+        [TestMethod]
+        public void FormatVramUsage_ReturnsUsedAndTotal_WhenPercentageDisabled()
+        {
+            string value = OverlayMetricCollector.FormatVramUsage(4096f, 8192f, showPercentage: false);
+
+            Assert.AreEqual("4 / 8 GB", value);
+        }
     }
 }

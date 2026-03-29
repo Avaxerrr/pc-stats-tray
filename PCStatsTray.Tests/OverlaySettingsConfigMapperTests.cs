@@ -13,7 +13,9 @@ namespace PCStatsTray.Tests
 
             var state = new OverlaySettingsState
             {
-                ToggleHotkey = new HotkeyBinding(6, 0x4F, "Ctrl+Shift+O"),
+                ToggleAllHotkey = new HotkeyBinding(6, 0x4F, "Ctrl+Shift+O"),
+                ToggleDesktopHotkey = new HotkeyBinding(6, 0x44, "Ctrl+Shift+D"),
+                ToggleRtssHotkey = new HotkeyBinding(6, 0x52, "Ctrl+Shift+R"),
                 SettingsHotkey = new HotkeyBinding(6, 0x53, "Ctrl+Shift+S"),
                 Enabled = false,
                 DesktopOverlayEnabled = true,
@@ -31,6 +33,7 @@ namespace PCStatsTray.Tests
                 ShowTextOutline = true,
                 TextOutlineThickness = 3,
                 ShowRamAsPercentage = true,
+                ShowVramAsPercentage = true,
                 CpuFanSensorKey = "cpu-fan",
                 GpuFanSensorKey = "gpu-fan",
                 CaseFanSensorKey = "case-fan",
@@ -40,6 +43,8 @@ namespace PCStatsTray.Tests
             OverlaySettingsConfigMapper.Apply(config, state);
 
             Assert.IsFalse(config.Enabled);
+            Assert.AreEqual("Ctrl+Shift+D", config.DesktopHotkeyDisplay);
+            Assert.AreEqual("Ctrl+Shift+R", config.RtssHotkeyDisplay);
             Assert.IsTrue(config.RtssOverlayEnabled);
             Assert.AreEqual("BottomLeft", config.Position);
             Assert.AreEqual(12, config.OffsetX);
@@ -49,6 +54,7 @@ namespace PCStatsTray.Tests
             Assert.AreEqual("Bahnschrift", config.FontFamily);
             Assert.AreEqual(OverlayConfig.BackgroundNone, config.BackgroundMode);
             Assert.AreEqual(OverlayConfig.RamDisplayPercentage, config.RamDisplayMode);
+            Assert.AreEqual(OverlayConfig.VramDisplayPercentage, config.VramDisplayMode);
             Assert.AreEqual("cpu-fan", config.CpuFanSensorKey);
             Assert.IsFalse(config.Metrics[1].Enabled);
         }

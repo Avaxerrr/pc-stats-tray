@@ -28,9 +28,13 @@ namespace PCStatsTray
         private readonly Computer _computer;
         private readonly List<FanSensorOption> _fanSensorOptions;
 
-        private TextBox _toggleHotkeyBox = null!;
+        private TextBox _toggleAllHotkeyBox = null!;
+        private TextBox _toggleDesktopHotkeyBox = null!;
+        private TextBox _toggleRtssHotkeyBox = null!;
         private TextBox _settingsHotkeyBox = null!;
-        private HotkeyBinding _capturedToggleHotkey;
+        private HotkeyBinding _capturedToggleAllHotkey;
+        private HotkeyBinding _capturedToggleDesktopHotkey;
+        private HotkeyBinding _capturedToggleRtssHotkey;
         private HotkeyBinding _capturedSettingsHotkey;
         private TextBox? _activeHotkeyBox;
         private HotkeyCaptureTarget _activeHotkeyTarget;
@@ -58,6 +62,7 @@ namespace PCStatsTray
         private ComboBox _backgroundModeBox = null!;
         private ComboBox _fontFamilyBox = null!;
         private ComboBox _ramDisplayModeBox = null!;
+        private ComboBox _vramDisplayModeBox = null!;
         private ComboBox _cpuFanSensorBox = null!;
         private ComboBox _gpuFanSensorBox = null!;
         private ComboBox _caseFanSensorBox = null!;
@@ -77,7 +82,9 @@ namespace PCStatsTray
             _onSave = onSave;
             _computer.Accept(new UpdateVisitor());
             _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
-            _capturedToggleHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
+            _capturedToggleAllHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
+            _capturedToggleDesktopHotkey = HotkeyBinding.FromStored(config.DesktopHotkeyModifiers, config.DesktopHotkeyVk, config.DesktopHotkeyDisplay);
+            _capturedToggleRtssHotkey = HotkeyBinding.FromStored(config.RtssHotkeyModifiers, config.RtssHotkeyVk, config.RtssHotkeyDisplay);
             _capturedSettingsHotkey = HotkeyBinding.FromStored(config.SettingsHotkeyModifiers, config.SettingsHotkeyVk, config.SettingsHotkeyDisplay);
             (_alignRight, _alignBottom) = config.Position switch
             {
@@ -127,14 +134,24 @@ namespace PCStatsTray
             int cardWidth = Ui(350);
             int marginX = Ui(24);
 
-            var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(150), cardWidth, marginX);
-            hotkeyCard.Controls.Add(MakeLabel("Toggle OSD", Ui(16), Ui(42)));
-            _toggleHotkeyBox = MakeHotkeyBox(_capturedToggleHotkey.Display, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
-            WireHotkeyCapture(_toggleHotkeyBox, HotkeyCaptureTarget.ToggleOsd, () => _capturedToggleHotkey.IsEmpty ? _config.HotkeyDisplay : _capturedToggleHotkey.Display);
-            hotkeyCard.Controls.Add(_toggleHotkeyBox);
+            var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(246), cardWidth, marginX);
+            hotkeyCard.Controls.Add(MakeLabel("Toggle all OSD", Ui(16), Ui(42)));
+            _toggleAllHotkeyBox = MakeHotkeyBox(_capturedToggleAllHotkey.Display, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_toggleAllHotkeyBox, HotkeyCaptureTarget.ToggleAllOsd, () => _capturedToggleAllHotkey.IsEmpty ? _config.HotkeyDisplay : _capturedToggleAllHotkey.Display);
+            hotkeyCard.Controls.Add(_toggleAllHotkeyBox);
 
-            hotkeyCard.Controls.Add(MakeLabel("Open settings", Ui(16), Ui(92)));
-            _settingsHotkeyBox = MakeHotkeyBox(_capturedSettingsHotkey.Display, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            hotkeyCard.Controls.Add(MakeLabel("Desktop OSD", Ui(16), Ui(92)));
+            _toggleDesktopHotkeyBox = MakeHotkeyBox(_capturedToggleDesktopHotkey.Display, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_toggleDesktopHotkeyBox, HotkeyCaptureTarget.ToggleDesktopOsd, () => _capturedToggleDesktopHotkey.IsEmpty ? _config.DesktopHotkeyDisplay : _capturedToggleDesktopHotkey.Display);
+            hotkeyCard.Controls.Add(_toggleDesktopHotkeyBox);
+
+            hotkeyCard.Controls.Add(MakeLabel("RTSS OSD", Ui(16), Ui(142)));
+            _toggleRtssHotkeyBox = MakeHotkeyBox(_capturedToggleRtssHotkey.Display, new Point(Ui(132), Ui(138)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_toggleRtssHotkeyBox, HotkeyCaptureTarget.ToggleRtssOsd, () => _capturedToggleRtssHotkey.IsEmpty ? _config.RtssHotkeyDisplay : _capturedToggleRtssHotkey.Display);
+            hotkeyCard.Controls.Add(_toggleRtssHotkeyBox);
+
+            hotkeyCard.Controls.Add(MakeLabel("Open settings", Ui(16), Ui(192)));
+            _settingsHotkeyBox = MakeHotkeyBox(_capturedSettingsHotkey.Display, new Point(Ui(132), Ui(188)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
             WireHotkeyCapture(_settingsHotkeyBox, HotkeyCaptureTarget.OpenSettings, () => _capturedSettingsHotkey.IsEmpty ? _config.SettingsHotkeyDisplay : _capturedSettingsHotkey.Display);
             hotkeyCard.Controls.Add(_settingsHotkeyBox);
 
@@ -309,13 +326,20 @@ namespace PCStatsTray
                 ApplyLive();
             };
 
-            var ramCard = MakeCard(content, "RAM Display", ref y, Ui(96), cardWidth, marginX);
+            var ramCard = MakeCard(content, "Memory Display", ref y, Ui(132), cardWidth, marginX);
             ramCard.Controls.Add(MakeLabel("Show RAM as", Ui(16), Ui(42)));
             _ramDisplayModeBox = MakeComboBox(new Point(Ui(132), Ui(38)), new Size(ramCard.Width - Ui(148), Ui(28)));
             _ramDisplayModeBox.Items.AddRange(new object[] { "Used / Total GB", "Percentage" });
             _ramDisplayModeBox.SelectedIndex = _config.ShowRamAsPercentage() ? 1 : 0;
             _ramDisplayModeBox.SelectedIndexChanged += (_, _) => ApplyLive();
             ramCard.Controls.Add(_ramDisplayModeBox);
+
+            ramCard.Controls.Add(MakeLabel("Show VRAM as", Ui(16), Ui(78)));
+            _vramDisplayModeBox = MakeComboBox(new Point(Ui(132), Ui(74)), new Size(ramCard.Width - Ui(148), Ui(28)));
+            _vramDisplayModeBox.Items.AddRange(new object[] { "Used / Total GB", "Percentage" });
+            _vramDisplayModeBox.SelectedIndex = _config.ShowVramAsPercentage() ? 1 : 0;
+            _vramDisplayModeBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            ramCard.Controls.Add(_vramDisplayModeBox);
 
             var fanSensorsCard = MakeCard(content, "Fan Sensors", ref y, Ui(152), cardWidth, marginX);
             fanSensorsCard.Controls.Add(MakeLabel("CPU Fan", Ui(16), Ui(42)));
@@ -431,13 +455,20 @@ namespace PCStatsTray
                 return;
             }
 
-            if (_activeHotkeyTarget == HotkeyCaptureTarget.ToggleOsd)
+            switch (_activeHotkeyTarget)
             {
-                _capturedToggleHotkey = binding;
-            }
-            else
-            {
-                _capturedSettingsHotkey = binding;
+                case HotkeyCaptureTarget.ToggleAllOsd:
+                    _capturedToggleAllHotkey = binding;
+                    break;
+                case HotkeyCaptureTarget.ToggleDesktopOsd:
+                    _capturedToggleDesktopHotkey = binding;
+                    break;
+                case HotkeyCaptureTarget.ToggleRtssOsd:
+                    _capturedToggleRtssHotkey = binding;
+                    break;
+                default:
+                    _capturedSettingsHotkey = binding;
+                    break;
             }
 
             _activeHotkeyBox.Text = binding.Display;
@@ -456,7 +487,9 @@ namespace PCStatsTray
         {
             var state = new OverlaySettingsState
             {
-                ToggleHotkey = _capturedToggleHotkey,
+                ToggleAllHotkey = _capturedToggleAllHotkey,
+                ToggleDesktopHotkey = _capturedToggleDesktopHotkey,
+                ToggleRtssHotkey = _capturedToggleRtssHotkey,
                 SettingsHotkey = _capturedSettingsHotkey,
                 Enabled = _enabledCheck.Checked,
                 DesktopOverlayEnabled = _desktopOverlayCheck.Checked,
@@ -474,6 +507,7 @@ namespace PCStatsTray
                 ShowTextOutline = _outlineCheck.Checked,
                 TextOutlineThickness = _outlineThicknessSlider.Value,
                 ShowRamAsPercentage = _ramDisplayModeBox.SelectedIndex == 1,
+                ShowVramAsPercentage = _vramDisplayModeBox.SelectedIndex == 1,
                 CpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_cpuFanSensorBox.SelectedItem),
                 GpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_gpuFanSensorBox.SelectedItem),
                 CaseFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_caseFanSensorBox.SelectedItem),
@@ -929,7 +963,9 @@ namespace PCStatsTray
 
         private enum HotkeyCaptureTarget
         {
-            ToggleOsd,
+            ToggleAllOsd,
+            ToggleDesktopOsd,
+            ToggleRtssOsd,
             OpenSettings
         }
     }

@@ -149,6 +149,20 @@ namespace PCStatsTray
             toggleOsdItem.Click += (s, e) => ToggleOverlay();
             contextMenu.Items.Add(toggleOsdItem);
 
+            var toggleDesktopOsdItem = new ToolStripMenuItem($"Toggle Desktop OSD  ({overlayConfig.DesktopHotkeyDisplay})")
+            {
+                Checked = overlayConfig.DesktopOverlayEnabled
+            };
+            toggleDesktopOsdItem.Click += (s, e) => ToggleDesktopOverlay();
+            contextMenu.Items.Add(toggleDesktopOsdItem);
+
+            var toggleRtssOsdItem = new ToolStripMenuItem($"Toggle RTSS OSD  ({overlayConfig.RtssHotkeyDisplay})")
+            {
+                Checked = overlayConfig.RtssOverlayEnabled
+            };
+            toggleRtssOsdItem.Click += (s, e) => ToggleRtssOverlay();
+            contextMenu.Items.Add(toggleRtssOsdItem);
+
             contextMenu.Items.Add($"OSD Settings…  ({overlayConfig.SettingsHotkeyDisplay})", null, (s, e) => OpenOverlaySettings());
 
             rtssStatusItem = new ToolStripMenuItem("RTSS: checking…")
@@ -186,16 +200,39 @@ namespace PCStatsTray
 
             ApplyOverlayOutputs();
             AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
+            PopulateInitialMenu();
+        }
+
+        private static void ToggleDesktopOverlay()
+        {
+            overlayConfig.DesktopOverlayEnabled = !overlayConfig.DesktopOverlayEnabled;
+            ApplyOverlayOutputs();
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
+            PopulateInitialMenu();
+        }
+
+        private static void ToggleRtssOverlay()
+        {
+            overlayConfig.RtssOverlayEnabled = !overlayConfig.RtssOverlayEnabled;
+            ApplyOverlayOutputs();
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
+            PopulateInitialMenu();
         }
 
         private static void OnHotkeyPressed(int hotkeyId)
         {
             switch (hotkeyId)
             {
-                case 1:
+                case GlobalHotkeyService.ToggleAllHotkeyId:
                     ToggleOverlay();
                     break;
-                case 2:
+                case GlobalHotkeyService.ToggleDesktopHotkeyId:
+                    ToggleDesktopOverlay();
+                    break;
+                case GlobalHotkeyService.ToggleRtssHotkeyId:
+                    ToggleRtssOverlay();
+                    break;
+                case GlobalHotkeyService.OpenSettingsHotkeyId:
                     OpenOverlaySettings();
                     break;
             }

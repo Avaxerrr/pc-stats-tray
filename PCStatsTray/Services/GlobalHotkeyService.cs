@@ -6,6 +6,11 @@ namespace PCStatsTray
 {
     internal sealed class GlobalHotkeyService : IDisposable
     {
+        public const int ToggleAllHotkeyId = 1;
+        public const int ToggleDesktopHotkeyId = 2;
+        public const int ToggleRtssHotkeyId = 3;
+        public const int OpenSettingsHotkeyId = 4;
+
         private readonly HotkeyWindow _window;
 
         public event Action<int>? HotkeyPressed;
@@ -22,12 +27,22 @@ namespace PCStatsTray
 
             if (config.HotkeyVk != 0)
             {
-                HotkeyWindow.RegisterHotKey(_window.Handle, 1, (uint)config.HotkeyModifiers, (uint)config.HotkeyVk);
+                HotkeyWindow.RegisterHotKey(_window.Handle, ToggleAllHotkeyId, (uint)config.HotkeyModifiers, (uint)config.HotkeyVk);
+            }
+
+            if (config.DesktopHotkeyVk != 0)
+            {
+                HotkeyWindow.RegisterHotKey(_window.Handle, ToggleDesktopHotkeyId, (uint)config.DesktopHotkeyModifiers, (uint)config.DesktopHotkeyVk);
+            }
+
+            if (config.RtssHotkeyVk != 0)
+            {
+                HotkeyWindow.RegisterHotKey(_window.Handle, ToggleRtssHotkeyId, (uint)config.RtssHotkeyModifiers, (uint)config.RtssHotkeyVk);
             }
 
             if (config.SettingsHotkeyVk != 0)
             {
-                HotkeyWindow.RegisterHotKey(_window.Handle, 2, (uint)config.SettingsHotkeyModifiers, (uint)config.SettingsHotkeyVk);
+                HotkeyWindow.RegisterHotKey(_window.Handle, OpenSettingsHotkeyId, (uint)config.SettingsHotkeyModifiers, (uint)config.SettingsHotkeyVk);
             }
         }
 
@@ -39,8 +54,10 @@ namespace PCStatsTray
 
         private void UnregisterAll()
         {
-            HotkeyWindow.UnregisterHotKey(_window.Handle, 1);
-            HotkeyWindow.UnregisterHotKey(_window.Handle, 2);
+            HotkeyWindow.UnregisterHotKey(_window.Handle, ToggleAllHotkeyId);
+            HotkeyWindow.UnregisterHotKey(_window.Handle, ToggleDesktopHotkeyId);
+            HotkeyWindow.UnregisterHotKey(_window.Handle, ToggleRtssHotkeyId);
+            HotkeyWindow.UnregisterHotKey(_window.Handle, OpenSettingsHotkeyId);
         }
 
         /// <summary>

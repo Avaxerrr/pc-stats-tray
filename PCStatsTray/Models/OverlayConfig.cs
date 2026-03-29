@@ -38,6 +38,8 @@ namespace PCStatsTray
         public const string BackgroundNone = "None";
         public const string RamDisplayUsedAndTotal = "UsedAndTotal";
         public const string RamDisplayPercentage = "Percentage";
+        public const string VramDisplayUsedAndTotal = "UsedAndTotal";
+        public const string VramDisplayPercentage = "Percentage";
 
         public bool Enabled { get; set; } = true;
 
@@ -45,6 +47,12 @@ namespace PCStatsTray
         public string HotkeyDisplay { get; set; } = "Ctrl+Shift+O";
         public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
         public int HotkeyVk { get; set; } = 0x4F; // 'O'
+        public string DesktopHotkeyDisplay { get; set; } = "Ctrl+Shift+D";
+        public int DesktopHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
+        public int DesktopHotkeyVk { get; set; } = 0x44; // 'D'
+        public string RtssHotkeyDisplay { get; set; } = "Ctrl+Shift+R";
+        public int RtssHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
+        public int RtssHotkeyVk { get; set; } = 0x52; // 'R'
         public string SettingsHotkeyDisplay { get; set; } = "Ctrl+Shift+S";
         public int SettingsHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
         public int SettingsHotkeyVk { get; set; } = 0x53; // 'S'
@@ -64,6 +72,7 @@ namespace PCStatsTray
         public bool ShowTextOutline { get; set; } = true;
         public int TextOutlineThickness { get; set; } = 2;
         public string RamDisplayMode { get; set; } = RamDisplayUsedAndTotal;
+        public string VramDisplayMode { get; set; } = VramDisplayUsedAndTotal;
         public int SettingsWindowX { get; set; } = -1;
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
@@ -140,6 +149,11 @@ namespace PCStatsTray
         public bool ShowRamAsPercentage()
         {
             return string.Equals(RamDisplayMode, RamDisplayPercentage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool ShowVramAsPercentage()
+        {
+            return string.Equals(VramDisplayMode, VramDisplayPercentage, StringComparison.OrdinalIgnoreCase);
         }
 
         public bool HasBackground()

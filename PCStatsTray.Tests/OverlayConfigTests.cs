@@ -22,5 +22,16 @@ namespace PCStatsTray.Tests
             Assert.IsTrue(config.Metrics.Any(metric => metric.Key == "CpuFan" && metric.Enabled));
             Assert.IsTrue(config.Metrics.Any(metric => metric.Key == "CpuTemp" && !metric.Enabled));
         }
+
+        [TestMethod]
+        public void ShowVramAsPercentage_ReturnsTrue_WhenConfigured()
+        {
+            var config = new OverlayConfig
+            {
+                VramDisplayMode = OverlayConfig.VramDisplayPercentage
+            };
+
+            Assert.IsTrue(config.ShowVramAsPercentage());
+        }
     }
 }

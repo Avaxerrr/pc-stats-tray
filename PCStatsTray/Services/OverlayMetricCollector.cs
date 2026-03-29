@@ -20,7 +20,7 @@ namespace PCStatsTray
                          hardware.HardwareType == HardwareType.GpuAmd ||
                          hardware.HardwareType == HardwareType.GpuIntel)
                 {
-                    CollectGpuMetrics(hardware, currentValues);
+                    CollectGpuMetrics(hardware, config, currentValues);
                 }
                 else if (hardware.HardwareType == HardwareType.Memory)
                 {
@@ -37,13 +37,18 @@ namespace PCStatsTray
             if (availableGb.HasValue)
             {
                 float totalGb = usedGb + availableGb.Value;
-                if (showPercentage)
-                {
-                    float usedPercent = totalGb > 0 ? (usedGb / totalGb) * 100f : 0f;
-                    return $"{usedPercent:0}%";
-                }
+                return FormatUsageInGigabytes(usedGb, totalGb, showPercentage);
+            }
 
-                return $"{usedGb:0.#} / {totalGb:0.#} GB";
+            return $"{usedGb:0.#} GB";
+        }
+
+        internal static string FormatVramUsage(float usedMb, float? totalMb, bool showPercentage)
+        {
+            float usedGb = usedMb / 1024f;
+            if (totalMb.HasValue)
+            {
+                return FormatUsageInGigabytes(usedGb, totalMb.Value / 1024f, showPercentage);
             }
 
             return $"{usedGb:0.#} GB";
@@ -80,7 +85,7 @@ namespace PCStatsTray
             }
         }
 
-        private static void CollectGpuMetrics(IHardware hardware, IDictionary<string, string> currentValues)
+        private static void CollectGpuMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues)
         {
             var temp = hardware.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && s.Name.Contains("Core"))
                     ?? hardware.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
@@ -110,15 +115,8 @@ namespace PCStatsTray
             if (vramUsed?.Value.HasValue == true)
             {
                 float usedMb = vramUsed.Value.Value;
-                if (vramTotal?.Value.HasValue == true)
-                {
-                    float totalMb = vramTotal.Value.Value;
-                    currentValues["GpuVram"] = $"{usedMb / 1024:0.#} / {totalMb / 1024:0.#} GB";
-                }
-                else
-                {
-                    currentValues["GpuVram"] = $"{usedMb / 1024:0.#} GB";
-                }
+                float? totalMb = vramTotal?.Value.HasValue == true ? vramTotal.Value.Value : null;
+                currentValues["GpuVram"] = FormatVramUsage(usedMb, totalMb, config.ShowVramAsPercentage());
             }
 
             var power = hardware.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Power);
@@ -140,6 +138,17 @@ namespace PCStatsTray
             float usedGb = used.Value!.Value;
             float? availableGb = available?.Value.HasValue == true ? available.Value!.Value : null;
             currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, config.ShowRamAsPercentage());
+        }
+
+        private static string FormatUsageInGigabytes(float usedGb, float totalGb, bool showPercentage)
+        {
+            if (showPercentage)
+            {
+                float usedPercent = totalGb > 0 ? (usedGb / totalGb) * 100f : 0f;
+                return $"{usedPercent:0}%";
+            }
+
+            return $"{usedGb:0.#} / {totalGb:0.#} GB";
         }
     }
 }

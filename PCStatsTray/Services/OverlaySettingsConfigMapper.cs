@@ -4,7 +4,9 @@ namespace PCStatsTray
 {
     internal sealed class OverlaySettingsState
     {
-        public HotkeyBinding ToggleHotkey { get; init; }
+        public HotkeyBinding ToggleAllHotkey { get; init; }
+        public HotkeyBinding ToggleDesktopHotkey { get; init; }
+        public HotkeyBinding ToggleRtssHotkey { get; init; }
         public HotkeyBinding SettingsHotkey { get; init; }
         public bool Enabled { get; init; }
         public bool DesktopOverlayEnabled { get; init; }
@@ -22,6 +24,7 @@ namespace PCStatsTray
         public bool ShowTextOutline { get; init; }
         public int TextOutlineThickness { get; init; }
         public bool ShowRamAsPercentage { get; init; }
+        public bool ShowVramAsPercentage { get; init; }
         public string CpuFanSensorKey { get; init; } = string.Empty;
         public string GpuFanSensorKey { get; init; } = string.Empty;
         public string CaseFanSensorKey { get; init; } = string.Empty;
@@ -32,11 +35,25 @@ namespace PCStatsTray
     {
         public static void Apply(OverlayConfig config, OverlaySettingsState state)
         {
-            if (!state.ToggleHotkey.IsEmpty)
+            if (!state.ToggleAllHotkey.IsEmpty)
             {
-                config.HotkeyDisplay = state.ToggleHotkey.Display;
-                config.HotkeyModifiers = state.ToggleHotkey.Modifiers;
-                config.HotkeyVk = state.ToggleHotkey.VirtualKey;
+                config.HotkeyDisplay = state.ToggleAllHotkey.Display;
+                config.HotkeyModifiers = state.ToggleAllHotkey.Modifiers;
+                config.HotkeyVk = state.ToggleAllHotkey.VirtualKey;
+            }
+
+            if (!state.ToggleDesktopHotkey.IsEmpty)
+            {
+                config.DesktopHotkeyDisplay = state.ToggleDesktopHotkey.Display;
+                config.DesktopHotkeyModifiers = state.ToggleDesktopHotkey.Modifiers;
+                config.DesktopHotkeyVk = state.ToggleDesktopHotkey.VirtualKey;
+            }
+
+            if (!state.ToggleRtssHotkey.IsEmpty)
+            {
+                config.RtssHotkeyDisplay = state.ToggleRtssHotkey.Display;
+                config.RtssHotkeyModifiers = state.ToggleRtssHotkey.Modifiers;
+                config.RtssHotkeyVk = state.ToggleRtssHotkey.VirtualKey;
             }
 
             if (!state.SettingsHotkey.IsEmpty)
@@ -70,6 +87,9 @@ namespace PCStatsTray
             config.RamDisplayMode = state.ShowRamAsPercentage
                 ? OverlayConfig.RamDisplayPercentage
                 : OverlayConfig.RamDisplayUsedAndTotal;
+            config.VramDisplayMode = state.ShowVramAsPercentage
+                ? OverlayConfig.VramDisplayPercentage
+                : OverlayConfig.VramDisplayUsedAndTotal;
             config.CpuFanSensorKey = state.CpuFanSensorKey;
             config.GpuFanSensorKey = state.GpuFanSensorKey;
             config.CaseFanSensorKey = state.CaseFanSensorKey;
