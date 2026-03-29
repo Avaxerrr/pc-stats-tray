@@ -1,17 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace HwMonTray
 {
     /// <summary>
-    /// Modern OSD settings dialog with custom-painted controls and live preview.
+    /// Overlay settings with live preview and DPI-aware layout.
     /// </summary>
     public class OverlaySettingsForm : Form
     {
-        // ── Theme ──
         private static readonly Color BgBase = Color.FromArgb(22, 22, 28);
         private static readonly Color BgCard = Color.FromArgb(30, 32, 38);
         private static readonly Color BgInput = Color.FromArgb(38, 40, 48);
@@ -24,28 +25,27 @@ namespace HwMonTray
         private readonly OverlayConfig _config;
         private readonly Action<OverlayConfig> _onSave;
 
-        // Controls
         private TextBox _hotkeyBox = null!;
-        private int _capturedMods, _capturedVk;
+        private int _capturedMods;
+        private int _capturedVk;
         private string _capturedDisplay = "";
         private bool _isCapturing;
 
-        // Position
-        private int _selectedCorner; // 0=TL, 1=TR, 2=BL, 3=BR
+        private int _selectedCorner;
         private Panel _cornerPicker = null!;
         private TrackBar _marginSlider = null!;
         private Label _marginValue = null!;
-
-        // Appearance
         private TrackBar _opacitySlider = null!;
         private Label _opacityValue = null!;
         private TrackBar _fontSlider = null!;
         private Label _fontValue = null!;
+        private ComboBox _backgroundModeBox = null!;
+        private ComboBox _fontFamilyBox = null!;
+        private ComboBox _ramDisplayModeBox = null!;
+        private CheckBox _shadowCheck = null!;
         private CheckBox _borderCheck = null!;
-
-        // Metrics
-        private Panel _metricsPanel = null!;
-        private CheckBox[] _metricChecks = null!;
+        private CheckBox[] _metricChecks = Array.Empty<CheckBox>();
+        private ModernScrollContainer? _scrollContainer;
 
         public OverlaySettingsForm(OverlayConfig config, Action<OverlayConfig> onSave)
         {
@@ -56,326 +56,245 @@ namespace HwMonTray
             _capturedDisplay = config.HotkeyDisplay;
             _selectedCorner = config.Position switch
             {
-                "TopLeft" => 0, "TopRight" => 1,
-                "BottomLeft" => 2, "BottomRight" => 3, _ => 1
+                "TopLeft" => 0,
+                "TopRight" => 1,
+                "BottomLeft" => 2,
+                "BottomRight" => 3,
+                _ => 1
             };
 
             Text = "OSD Settings";
-            ClientSize = new Size(380, 620);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            ClientSize = new Size(420, 840);
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
+            MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgBase;
             ForeColor = FgPrimary;
             Font = new Font("Segoe UI", 10f);
             TopMost = true;
             DoubleBuffered = true;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            MinimumSize = new Size(380, 640);
 
             BuildUI();
+            UpdateAppearanceState();
+            RestoreWindowBounds();
+
+            ResizeEnd += (_, _) => PersistWindowBounds();
+            FormClosing += (_, _) => PersistWindowBounds();
         }
 
         private void BuildUI()
         {
-            var scroll = new Panel
+            _scrollContainer = new ModernScrollContainer(BgBase, Border, Accent)
             {
-                Dock = DockStyle.Fill,
-                AutoScroll = true
+                Dock = DockStyle.Fill
             };
+            var content = _scrollContainer.Content;
 
-            int y = 16;
-            int cardW = 315; // Account for 380 total width and scrollbar
-            int marginX = 24;
+            int y = Ui(16);
+            int cardWidth = Ui(350);
+            int marginX = Ui(24);
 
-            // ── HOTKEY CARD ──
-            var hotkeyCard = MakeCard(scroll, "Hotkey", ref y, 90, cardW, marginX);
+            var hotkeyCard = MakeCard(content, "Hotkey", ref y, Ui(92), cardWidth, marginX);
             _hotkeyBox = new TextBox
             {
                 Text = _capturedDisplay,
                 ReadOnly = true,
                 TextAlign = HorizontalAlignment.Center,
-                Location = new Point(16, 40),
-                Size = new Size(hotkeyCard.Width - 32, 36),
+                Location = new Point(Ui(16), Ui(42)),
+                Size = new Size(hotkeyCard.Width - Ui(32), Ui(34)),
                 BackColor = BgInput,
                 ForeColor = Accent,
-                Font = new Font("Consolas", 14f, FontStyle.Bold),
-                BorderStyle = BorderStyle.None,
-                Cursor = Cursors.Hand
+                Font = new Font("Consolas", 13f, FontStyle.Bold),
+                BorderStyle = BorderStyle.FixedSingle
             };
-            _hotkeyBox.GotFocus += (s, e) =>
+            _hotkeyBox.GotFocus += (_, _) =>
             {
                 _isCapturing = true;
-                _hotkeyBox.Text = "press shortcut…";
+                _hotkeyBox.Text = "Press shortcut...";
                 _hotkeyBox.ForeColor = Color.FromArgb(255, 195, 70);
             };
-            _hotkeyBox.LostFocus += (s, e) =>
+            _hotkeyBox.LostFocus += (_, _) =>
             {
                 _isCapturing = false;
                 _hotkeyBox.ForeColor = Accent;
-                _hotkeyBox.Text = string.IsNullOrEmpty(_capturedDisplay)
-                    ? _config.HotkeyDisplay : _capturedDisplay;
+                _hotkeyBox.Text = string.IsNullOrEmpty(_capturedDisplay) ? _config.HotkeyDisplay : _capturedDisplay;
             };
             _hotkeyBox.KeyDown += OnHotkeyKeyDown;
             hotkeyCard.Controls.Add(_hotkeyBox);
-            y += 8;
 
-            // ── POSITION CARD ──
-            var posCard = MakeCard(scroll, "Position", ref y, 120, cardW, marginX);
-
-            // Visual corner picker: 4 clickable squares in a 2x2 grid
+            var posCard = MakeCard(content, "Position", ref y, Ui(126), cardWidth, marginX);
             _cornerPicker = new Panel
             {
-                Location = new Point(16, 38),
-                Size = new Size(72, 56),
-                BackColor = Color.Transparent
+                Location = new Point(Ui(16), Ui(38)),
+                Size = new Size(Ui(84), Ui(62)),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
             };
             _cornerPicker.Paint += PaintCornerPicker;
             _cornerPicker.MouseClick += OnCornerPickerClick;
-            _cornerPicker.Cursor = Cursors.Hand;
             posCard.Controls.Add(_cornerPicker);
 
-            // Corner label
-            var cornerLabel = new Label
-            {
-                Text = "← pick a corner",
-                Location = new Point(96, 42),
-                AutoSize = true,
-                ForeColor = FgSecondary,
-                Font = new Font("Segoe UI", 9f)
-            };
-            posCard.Controls.Add(cornerLabel);
+            posCard.Controls.Add(MakeLabel("Pick a corner", Ui(112), Ui(42)));
+            posCard.Controls.Add(MakeLabel("Edge margin", Ui(112), Ui(72)));
 
-            // Edge margin
-            var edgeLabel = new Label
-            {
-                Text = "Edge margin",
-                Location = new Point(96, 72),
-                AutoSize = true,
-                ForeColor = FgSecondary,
-                Font = new Font("Segoe UI", 9f)
-            };
-            posCard.Controls.Add(edgeLabel);
-
-            _marginValue = new Label
-            {
-                Text = $"{_config.OffsetX} px",
-                Location = new Point(posCard.Width - 60, 72),
-                Size = new Size(48, 20),
-                ForeColor = FgPrimary,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight
-            };
+            _marginValue = MakeValueLabel($"{_config.OffsetX} px", posCard.Width - Ui(68), Ui(72));
             posCard.Controls.Add(_marginValue);
-
-            _marginSlider = MakeSlider(posCard, 96, 92, posCard.Width - 116, 5, 100,
-                Math.Max(_config.OffsetX, _config.OffsetY));
-            _marginSlider.ValueChanged += (s, e) =>
+            _marginSlider = MakeSlider(posCard, Ui(112), Ui(92), posCard.Width - Ui(132), 5, 160, Math.Max(_config.OffsetX, _config.OffsetY));
+            _marginSlider.ValueChanged += (_, _) =>
             {
                 _marginValue.Text = $"{_marginSlider.Value} px";
                 ApplyLive();
             };
-            y += 8;
 
-            // ── APPEARANCE CARD ──
-            var appCard = MakeCard(scroll, "Appearance", ref y, 160, cardW, marginX);
+            var appearanceCard = MakeCard(content, "Appearance", ref y, Ui(282), cardWidth, marginX);
+            appearanceCard.Controls.Add(MakeLabel("Background", Ui(16), Ui(42)));
+            _backgroundModeBox = MakeComboBox(new Point(Ui(132), Ui(38)), new Size(appearanceCard.Width - Ui(148), Ui(28)));
+            _backgroundModeBox.Items.AddRange(new object[] { "Solid background", "No background" });
+            _backgroundModeBox.SelectedIndex = _config.HasBackground() ? 0 : 1;
+            _backgroundModeBox.SelectedIndexChanged += (_, _) =>
+            {
+                UpdateAppearanceState();
+                ApplyLive();
+            };
+            appearanceCard.Controls.Add(_backgroundModeBox);
 
-            AddSliderRow(appCard, "Opacity", 38, 30, 100, (int)(_config.Opacity * 100),
-                v => $"{v}%", out _opacitySlider, out _opacityValue);
-            _opacitySlider.ValueChanged += (s, e) =>
+            AddSliderRow(appearanceCard, "Opacity", Ui(80), 30, 100, (int)Math.Round(_config.Opacity * 100f), value => $"{value}%", out _opacitySlider, out _opacityValue);
+            _opacitySlider.ValueChanged += (_, _) =>
             {
                 _opacityValue.Text = $"{_opacitySlider.Value}%";
                 ApplyLive();
             };
 
-            AddSliderRow(appCard, "Text size", 82, 8, 24, (int)_config.FontSize,
-                v => $"{v} pt", out _fontSlider, out _fontValue);
-            _fontSlider.ValueChanged += (s, e) =>
+            AddSliderRow(appearanceCard, "Text size", Ui(126), 8, 28, (int)Math.Round(_config.FontSize), value => $"{value} pt", out _fontSlider, out _fontValue);
+            _fontSlider.ValueChanged += (_, _) =>
             {
                 _fontValue.Text = $"{_fontSlider.Value} pt";
                 ApplyLive();
             };
-            
-            _borderCheck = new CheckBox
+
+            appearanceCard.Controls.Add(MakeLabel("Font", Ui(16), Ui(190)));
+            _fontFamilyBox = MakeComboBox(new Point(Ui(132), Ui(186)), new Size(appearanceCard.Width - Ui(148), Ui(28)));
+            foreach (var fontName in GetAvailableFontChoices(_config.FontFamily))
             {
-                Text = "  Show border outline",
-                Checked = _config.ShowBorder,
-                Location = new Point(16, 126),
-                AutoSize = true,
-                ForeColor = FgSecondary,
-                Font = new Font("Segoe UI", 9.5f),
-                Cursor = Cursors.Hand
-            };
-            _borderCheck.CheckedChanged += (s, e) => ApplyLive();
-            appCard.Controls.Add(_borderCheck);
-            
-            y += 8;
-
-            // ── METRICS CARD ──
-            int metricCount = _config.Metrics.Count;
-            int metricRowH = 32;
-            int metricsH = 36 + metricCount * metricRowH + 8;
-            var metCard = MakeCard(scroll, "Metrics", ref y, metricsH, cardW, marginX);
-
-            _metricChecks = new CheckBox[metricCount];
-            _metricsPanel = new Panel
-            {
-                Location = new Point(8, 34),
-                Size = new Size(metCard.Width - 16, metricCount * metricRowH + 4),
-                BackColor = Color.Transparent
-            };
-
-            for (int i = 0; i < metricCount; i++)
-            {
-                var m = _config.Metrics[i];
-                string icon = m.Key switch
-                {
-                    var k when k.Contains("Temp") => "🌡",
-                    var k when k.Contains("Load") => "📈",
-                    var k when k.Contains("Clock") => "⏱",
-                    var k when k.Contains("Power") => "⚡",
-                    var k when k.Contains("Ram") || k.Contains("Vram") => "💾",
-                    var k when k.Contains("Fan") => "🌀",
-                    _ => "•"
-                };
-
-                var cb = new CheckBox
-                {
-                    Text = $"  {icon}   {m.Label}",
-                    Checked = m.Enabled,
-                    Location = new Point(8, i * metricRowH),
-                    Size = new Size(_metricsPanel.Width - 16, metricRowH),
-                    ForeColor = FgPrimary,
-                    Font = new Font("Segoe UI", 10f),
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.Transparent,
-                    Cursor = Cursors.Hand
-                };
-                cb.FlatAppearance.BorderSize = 0; // Hide default border 
-                
-                // Custom paint for visible dark mode checkbox
-                cb.Paint += (s, e) =>
-                {
-                    var senderCb = (CheckBox)s!;
-                    var g = e.Graphics;
-                    g.Clear(BgCard);
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
-                    
-                    int boxSize = 16;
-                    int yBox = (senderCb.Height - boxSize) / 2;
-                    var boxRect = new Rectangle(8, yBox, boxSize, boxSize);
-
-                    using (var brush = new SolidBrush(senderCb.Checked ? Accent : BgInput))
-                        g.FillRectangle(brush, boxRect);
-                        
-                    using (var pen = new Pen(Border))
-                        g.DrawRectangle(pen, boxRect);
-
-                    if (senderCb.Checked)
-                    {
-                        using var pen = new Pen(Color.White, 2f);
-                        g.DrawLines(pen, new[] {
-                            new Point(boxRect.X + 3, boxRect.Y + 8),
-                            new Point(boxRect.X + 6, boxRect.Y + 11),
-                            new Point(boxRect.X + 12, boxRect.Y + 4)
-                        });
-                    }
-                    
-                    using var textBrush = new SolidBrush(FgPrimary);
-                    var strFmt = new StringFormat { LineAlignment = StringAlignment.Center };
-                    g.DrawString(senderCb.Text, senderCb.Font, textBrush, new RectangleF(32, 0, senderCb.Width - 32, senderCb.Height), strFmt);
-                };
-
-                int idx = i;
-                cb.CheckedChanged += (s, e) => ApplyLive();
-                _metricChecks[i] = cb;
-                _metricsPanel.Controls.Add(cb);
+                _fontFamilyBox.Items.Add(fontName);
             }
-            metCard.Controls.Add(_metricsPanel);
+            _fontFamilyBox.SelectedItem = _fontFamilyBox.Items.Cast<object>().FirstOrDefault(item =>
+                string.Equals(item.ToString(), _config.FontFamily, StringComparison.OrdinalIgnoreCase))
+                ?? _fontFamilyBox.Items.Cast<object>().FirstOrDefault(item =>
+                    string.Equals(item.ToString(), "Segoe UI", StringComparison.OrdinalIgnoreCase));
+            _fontFamilyBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            appearanceCard.Controls.Add(_fontFamilyBox);
 
-            // ── BOTTOM BAR ──
+            _shadowCheck = MakeCheckBox("Enable text shadow", Ui(16), Ui(232), _config.ShowTextShadow);
+            _shadowCheck.CheckedChanged += (_, _) => ApplyLive();
+            appearanceCard.Controls.Add(_shadowCheck);
+
+            _borderCheck = MakeCheckBox("Show border outline", Ui(190), Ui(232), _config.ShowBorder);
+            _borderCheck.CheckedChanged += (_, _) => ApplyLive();
+            appearanceCard.Controls.Add(_borderCheck);
+
+            var ramCard = MakeCard(content, "RAM Display", ref y, Ui(96), cardWidth, marginX);
+            ramCard.Controls.Add(MakeLabel("Show RAM as", Ui(16), Ui(42)));
+            _ramDisplayModeBox = MakeComboBox(new Point(Ui(132), Ui(38)), new Size(ramCard.Width - Ui(148), Ui(28)));
+            _ramDisplayModeBox.Items.AddRange(new object[] { "Used / Total GB", "Percentage" });
+            _ramDisplayModeBox.SelectedIndex = _config.ShowRamAsPercentage() ? 1 : 0;
+            _ramDisplayModeBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            ramCard.Controls.Add(_ramDisplayModeBox);
+
+            int metricRowHeight = Ui(30);
+            int metricsHeight = Ui(40) + (_config.Metrics.Count * metricRowHeight) + Ui(10);
+            var metricsCard = MakeCard(content, "Metrics", ref y, metricsHeight, cardWidth, marginX);
+            _metricChecks = new CheckBox[_config.Metrics.Count];
+
+            for (int i = 0; i < _config.Metrics.Count; i++)
+            {
+                var metric = _config.Metrics[i];
+                var check = MakeCheckBox(metric.Label, Ui(16), Ui(40) + (i * metricRowHeight), metric.Enabled);
+                check.Width = metricsCard.Width - Ui(32);
+                check.CheckedChanged += (_, _) => ApplyLive();
+                _metricChecks[i] = check;
+                metricsCard.Controls.Add(check);
+            }
+
             var bottom = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 56,
+                Height = Ui(62),
                 BackColor = Color.FromArgb(16, 16, 20)
             };
-            bottom.Paint += (s, e) =>
+            bottom.Paint += (_, e) =>
             {
                 using var pen = new Pen(Border);
                 e.Graphics.DrawLine(pen, 0, 0, bottom.Width, 0);
             };
 
-            var saveBtn = MakeButton("Save", 24, 12, 100, 34, AccentGreen,
-                Color.FromArgb(10, 10, 10), FontStyle.Bold);
-            saveBtn.Click += (s, e) =>
+            var saveButton = MakeButton("Save", Ui(24), Ui(14), Ui(104), Ui(34), AccentGreen, Color.FromArgb(10, 10, 10), FontStyle.Bold);
+            saveButton.Click += (_, _) =>
             {
                 CommitConfig();
                 _onSave(_config);
             };
 
-            var closeBtn = MakeButton("Close", 132, 12, 80, 34,
-                Color.FromArgb(50, 52, 60), FgPrimary, FontStyle.Regular);
-            closeBtn.Click += (s, e) => Close();
+            var closeButton = MakeButton("Close", Ui(136), Ui(14), Ui(84), Ui(34), Color.FromArgb(50, 52, 60), FgPrimary, FontStyle.Regular);
+            closeButton.Click += (_, _) => Close();
 
-            var liveIndicator = new Label
+            var liveLabel = new Label
             {
-                Text = "● live",
+                Text = "Live preview",
+                AutoSize = true,
                 ForeColor = AccentGreen,
                 Font = new Font("Segoe UI", 8.5f),
-                AutoSize = true,
-                Location = new Point(310, 20)
+                Location = new Point(Ui(286), Ui(21)),
+                BackColor = Color.Transparent
             };
 
-            bottom.Controls.AddRange(new Control[] { saveBtn, closeBtn, liveIndicator });
+            bottom.Controls.Add(saveButton);
+            bottom.Controls.Add(closeButton);
+            bottom.Controls.Add(liveLabel);
 
-            Controls.Add(scroll);
+            Controls.Add(_scrollContainer);
             Controls.Add(bottom);
         }
-
-        // ══════════════════════════════════════════════
-        //  CORNER PICKER — visual 2×2 grid
-        // ══════════════════════════════════════════════
 
         private void PaintCornerPicker(object? sender, PaintEventArgs e)
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            int w = _cornerPicker.Width, h = _cornerPicker.Height;
-            int bw = 30, bh = 24, gap = 6;
+            int width = _cornerPicker.Width;
+            int height = _cornerPicker.Height;
+            int boxWidth = Ui(32);
+            int boxHeight = Ui(24);
+            int gap = Ui(6);
 
-            // Monitor outline
-            using (var pen = new Pen(Color.FromArgb(60, 65, 75), 1.5f))
-                g.DrawRoundedRectangle(pen, 1, 1, w - 3, h - 3, 4);
+            using (var pen = new Pen(Color.FromArgb(60, 65, 75), Math.Max(1, Ui(1))))
+            {
+                g.DrawRoundedRectangle(pen, 1, 1, width - 3, height - 3, Ui(4));
+            }
 
             var positions = new[]
             {
-                new Point(gap, gap),                    // TL
-                new Point(w - bw - gap, gap),           // TR
-                new Point(gap, h - bh - gap),           // BL
-                new Point(w - bw - gap, h - bh - gap)   // BR
+                new Point(gap, gap),
+                new Point(width - boxWidth - gap, gap),
+                new Point(gap, height - boxHeight - gap),
+                new Point(width - boxWidth - gap, height - boxHeight - gap)
             };
 
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < positions.Length; i++)
             {
-                var r = new Rectangle(positions[i].X, positions[i].Y, bw, bh);
-                if (i == _selectedCorner)
-                {
-                    using var brush = new SolidBrush(Accent);
-                    g.FillRoundedRectangle(brush, r, 3);
-                }
-                else
-                {
-                    using var brush = new SolidBrush(Color.FromArgb(48, 50, 58));
-                    g.FillRoundedRectangle(brush, r, 3);
-                }
+                var rect = new Rectangle(positions[i].X, positions[i].Y, boxWidth, boxHeight);
+                using var brush = new SolidBrush(i == _selectedCorner ? Accent : Color.FromArgb(48, 50, 58));
+                g.FillRoundedRectangle(brush, rect, Ui(4));
             }
         }
 
         private void OnCornerPickerClick(object? sender, MouseEventArgs e)
         {
-            int w = _cornerPicker.Width, h = _cornerPicker.Height;
-            bool left = e.X < w / 2;
-            bool top = e.Y < h / 2;
+            bool left = e.X < _cornerPicker.Width / 2;
+            bool top = e.Y < _cornerPicker.Height / 2;
 
             _selectedCorner = (top, left) switch
             {
@@ -389,18 +308,20 @@ namespace HwMonTray
             ApplyLive();
         }
 
-        // ══════════════════════════════════════════════
-        //  HOTKEY CAPTURE
-        // ══════════════════════════════════════════════
-
         private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
         {
-            if (!_isCapturing) return;
+            if (!_isCapturing)
+            {
+                return;
+            }
+
             e.SuppressKeyPress = true;
             e.Handled = true;
 
-            if (e.KeyCode is Keys.ControlKey or Keys.ShiftKey or Keys.Menu
-                or Keys.LWin or Keys.RWin) return;
+            if (e.KeyCode is Keys.ControlKey or Keys.ShiftKey or Keys.Menu or Keys.LWin or Keys.RWin)
+            {
+                return;
+            }
 
             int mods = 0;
             string display = "";
@@ -410,11 +331,11 @@ namespace HwMonTray
 
             if (mods == 0)
             {
-                _hotkeyBox.Text = "need a modifier key!";
+                _hotkeyBox.Text = "Need a modifier key";
                 return;
             }
 
-            display += e.KeyCode.ToString();
+            display += e.KeyCode;
             _capturedMods = mods;
             _capturedVk = (int)e.KeyCode;
             _capturedDisplay = display;
@@ -422,10 +343,6 @@ namespace HwMonTray
             _hotkeyBox.ForeColor = AccentGreen;
             _isCapturing = false;
         }
-
-        // ══════════════════════════════════════════════
-        //  LIVE PREVIEW & CONFIG
-        // ══════════════════════════════════════════════
 
         private void ApplyLive()
         {
@@ -435,14 +352,17 @@ namespace HwMonTray
 
         private void CommitConfig()
         {
-            _config.HotkeyDisplay = _capturedDisplay;
-            _config.HotkeyModifiers = _capturedMods;
-            _config.HotkeyVk = _capturedVk;
+            _config.HotkeyDisplay = string.IsNullOrWhiteSpace(_capturedDisplay) ? _config.HotkeyDisplay : _capturedDisplay;
+            _config.HotkeyModifiers = _capturedMods == 0 ? _config.HotkeyModifiers : _capturedMods;
+            _config.HotkeyVk = _capturedVk == 0 ? _config.HotkeyVk : _capturedVk;
 
             _config.Position = _selectedCorner switch
             {
-                0 => "TopLeft", 1 => "TopRight",
-                2 => "BottomLeft", 3 => "BottomRight", _ => "TopRight"
+                0 => "TopLeft",
+                1 => "TopRight",
+                2 => "BottomLeft",
+                3 => "BottomRight",
+                _ => "TopRight"
             };
 
             int margin = _marginSlider.Value;
@@ -450,84 +370,141 @@ namespace HwMonTray
             _config.OffsetY = margin;
             _config.Opacity = _opacitySlider.Value / 100f;
             _config.FontSize = _fontSlider.Value;
+            _config.FontFamily = _fontFamilyBox.SelectedItem?.ToString() ?? _config.FontFamily;
+            _config.BackgroundMode = _backgroundModeBox.SelectedIndex == 1
+                ? OverlayConfig.BackgroundNone
+                : OverlayConfig.BackgroundSolid;
+            _config.ShowTextShadow = _shadowCheck.Checked;
             _config.ShowBorder = _borderCheck.Checked;
+            _config.RamDisplayMode = _ramDisplayModeBox.SelectedIndex == 1
+                ? OverlayConfig.RamDisplayPercentage
+                : OverlayConfig.RamDisplayUsedAndTotal;
 
             for (int i = 0; i < _metricChecks.Length && i < _config.Metrics.Count; i++)
+            {
                 _config.Metrics[i].Enabled = _metricChecks[i].Checked;
+            }
         }
 
-        // ══════════════════════════════════════════════
-        //  UI HELPERS
-        // ══════════════════════════════════════════════
+        private void UpdateAppearanceState()
+        {
+            bool hasBackground = _backgroundModeBox.SelectedIndex != 1;
+            _borderCheck.Enabled = hasBackground;
+            _borderCheck.ForeColor = hasBackground ? FgSecondary : Color.FromArgb(95, 100, 110);
+        }
 
-        private Panel MakeCard(Panel parent, string title, ref int y, int height, int cardW, int marginX)
+        private Panel MakeCard(Control parent, string title, ref int y, int height, int width, int marginX)
         {
             var card = new Panel
             {
                 Location = new Point(marginX, y),
-                Size = new Size(cardW, height),
+                Size = new Size(width, height),
                 BackColor = BgCard
             };
-            card.Paint += (s, e) =>
+            card.Paint += (_, e) =>
             {
                 var g = e.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-                // Card border
-                using var pen = new Pen(Border, 1f);
-                g.DrawRoundedRectangle(pen, 0, 0, card.Width - 1, card.Height - 1, 6);
+                using var pen = new Pen(Border, Math.Max(1, Ui(1)));
+                g.DrawRoundedRectangle(pen, 0, 0, card.Width - 1, card.Height - 1, Ui(6));
 
-                // Title
                 using var titleFont = new Font("Segoe UI", 10f, FontStyle.Bold);
                 using var titleBrush = new SolidBrush(Accent);
-                g.DrawString(title.ToUpper(), titleFont, titleBrush, 14, 10);
+                g.DrawString(title.ToUpperInvariant(), titleFont, titleBrush, Ui(14), Ui(10));
             };
-            card.Region = CreateRoundedRegion(card.Width, card.Height, 6);
+            card.Region = CreateRoundedRegion(card.Width, card.Height, Ui(6));
             parent.Controls.Add(card);
-            y += height + 16;
+            y += height + Ui(16);
             return card;
         }
 
-        private void AddSliderRow(Panel card, string label, int y, int min, int max,
-            int val, Func<int, string> fmt, out TrackBar slider, out Label valLabel)
+        private Label MakeLabel(string text, int x, int y)
         {
-            var lbl = new Label
+            return new Label
             {
-                Text = label,
-                Location = new Point(16, y + 2),
+                Text = text,
+                Location = new Point(x, y),
                 AutoSize = true,
                 ForeColor = FgSecondary,
                 Font = new Font("Segoe UI", 9.5f),
                 BackColor = Color.Transparent
             };
-            card.Controls.Add(lbl);
+        }
 
-            valLabel = new Label
+        private Label MakeValueLabel(string text, int x, int y)
+        {
+            return new Label
             {
-                Text = fmt(val),
-                Location = new Point(card.Width - 64, y + 2),
-                Size = new Size(50, 20),
+                Text = text,
+                Location = new Point(x, y),
+                Size = new Size(Ui(54), Ui(20)),
                 ForeColor = FgPrimary,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent
             };
-            card.Controls.Add(valLabel);
-
-            slider = MakeSlider(card, 16, y + 22, card.Width - 36, min, max, val);
         }
 
-        private TrackBar MakeSlider(Panel parent, int x, int y, int w, int min, int max, int val)
+        private ComboBox MakeComboBox(Point location, Size size)
+        {
+            return new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                Location = location,
+                Size = size,
+                BackColor = BgInput,
+                ForeColor = FgPrimary,
+                Font = new Font("Segoe UI", 9.5f)
+            };
+        }
+
+        private CheckBox MakeCheckBox(string text, int x, int y, bool isChecked)
+        {
+            return new CheckBox
+            {
+                Text = text,
+                Checked = isChecked,
+                Location = new Point(x, y),
+                AutoSize = true,
+                ForeColor = FgSecondary,
+                Font = new Font("Segoe UI", 9.5f),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+        }
+
+        private void AddSliderRow(
+            Panel card,
+            string label,
+            int y,
+            int min,
+            int max,
+            int value,
+            Func<int, string> format,
+            out TrackBar slider,
+            out Label valueLabel)
+        {
+            card.Controls.Add(MakeLabel(label, Ui(16), y + Ui(2)));
+
+            valueLabel = MakeValueLabel(format(value), card.Width - Ui(64), y + Ui(2));
+            card.Controls.Add(valueLabel);
+
+            slider = MakeSlider(card, Ui(16), y + Ui(22), card.Width - Ui(36), min, max, value);
+        }
+
+        private TrackBar MakeSlider(Control parent, int x, int y, int width, int min, int max, int value)
         {
             var slider = new TrackBar
             {
                 Location = new Point(x, y),
                 AutoSize = false,
-                Size = new Size(w, 20),
+                Size = new Size(width, Ui(22)),
                 Minimum = min,
                 Maximum = max,
-                Value = Math.Clamp(val, min, max),
+                Value = Math.Clamp(value, min, max),
                 TickStyle = TickStyle.None,
                 BackColor = BgCard
             };
@@ -535,68 +512,391 @@ namespace HwMonTray
             return slider;
         }
 
-        private Button MakeButton(string text, int x, int y, int w, int h,
-            Color bg, Color fg, FontStyle style)
+        private Button MakeButton(string text, int x, int y, int width, int height, Color bg, Color fg, FontStyle style)
         {
-            var btn = new Button
+            var button = new Button
             {
                 Text = text,
                 Location = new Point(x, y),
-                Size = new Size(w, h),
+                Size = new Size(width, height),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = bg,
                 ForeColor = fg,
                 Font = new Font("Segoe UI", 10f, style),
                 Cursor = Cursors.Hand
             };
-            btn.FlatAppearance.BorderSize = 0;
-            btn.FlatAppearance.MouseOverBackColor =
-                Color.FromArgb(Math.Min(bg.R + 20, 255), Math.Min(bg.G + 20, 255), Math.Min(bg.B + 20, 255));
-            return btn;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(
+                Math.Min(bg.R + 20, 255),
+                Math.Min(bg.G + 20, 255),
+                Math.Min(bg.B + 20, 255));
+            return button;
         }
 
-        private static Region CreateRoundedRegion(int w, int h, int r)
+        private IEnumerable<string> GetAvailableFontChoices(string currentFont)
+        {
+            string[] preferredFonts =
+            {
+                "Segoe UI",
+                "Bahnschrift",
+                "Consolas",
+                "Verdana",
+                "Tahoma",
+                "Trebuchet MS",
+                "Arial"
+            };
+
+            using var fonts = new InstalledFontCollection();
+            var installed = fonts.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var result = preferredFonts.Where(installed.Contains).ToList();
+
+            if (!string.IsNullOrWhiteSpace(currentFont) && installed.Contains(currentFont) && !result.Contains(currentFont, StringComparer.OrdinalIgnoreCase))
+            {
+                result.Add(currentFont);
+            }
+
+            if (result.Count == 0)
+            {
+                result.Add(string.IsNullOrWhiteSpace(currentFont) ? "Segoe UI" : currentFont);
+            }
+
+            return result;
+        }
+
+        private void RestoreWindowBounds()
+        {
+            if (!_config.HasSavedSettingsWindowBounds())
+            {
+                return;
+            }
+
+            StartPosition = FormStartPosition.Manual;
+            Bounds = new Rectangle(
+                _config.SettingsWindowX,
+                _config.SettingsWindowY,
+                _config.SettingsWindowWidth,
+                _config.SettingsWindowHeight);
+
+            bool isVisibleOnAnyScreen = Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(Bounds));
+            if (!isVisibleOnAnyScreen)
+            {
+                StartPosition = FormStartPosition.CenterScreen;
+            }
+        }
+
+        private void PersistWindowBounds()
+        {
+            if (WindowState != FormWindowState.Normal)
+            {
+                return;
+            }
+
+            _config.SettingsWindowX = Bounds.X;
+            _config.SettingsWindowY = Bounds.Y;
+            _config.SettingsWindowWidth = Bounds.Width;
+            _config.SettingsWindowHeight = Bounds.Height;
+            _onSave(_config);
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            _scrollContainer?.RefreshScrollMetrics();
+        }
+
+        private int Ui(int logicalPixels)
+        {
+            float dpi = DeviceDpi > 0 ? DeviceDpi : 96f;
+            return Math.Max(1, (int)Math.Round(logicalPixels * (dpi / 96f)));
+        }
+
+        private static Region CreateRoundedRegion(int width, int height, int radius)
         {
             using var path = new GraphicsPath();
-            int d = r * 2;
-            path.AddArc(0, 0, d, d, 180, 90);
-            path.AddArc(w - d, 0, d, d, 270, 90);
-            path.AddArc(w - d, h - d, d, d, 0, 90);
-            path.AddArc(0, h - d, d, d, 90, 90);
+            int diameter = radius * 2;
+            path.AddArc(0, 0, diameter, diameter, 180, 90);
+            path.AddArc(width - diameter, 0, diameter, diameter, 270, 90);
+            path.AddArc(width - diameter, height - diameter, diameter, diameter, 0, 90);
+            path.AddArc(0, height - diameter, diameter, diameter, 90, 90);
             path.CloseFigure();
             return new Region(path);
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  Extension for drawing rounded rects on Graphics
-    // ══════════════════════════════════════════════
     internal static class GraphicsExtensions
     {
-        public static void DrawRoundedRectangle(this Graphics g, Pen pen,
-            float x, float y, float w, float h, float r)
+        public static void DrawRoundedRectangle(this Graphics g, Pen pen, float x, float y, float width, float height, float radius)
         {
-            using var path = RoundedRectPath(x, y, w, h, r);
+            using var path = RoundedRectPath(x, y, width, height, radius);
             g.DrawPath(pen, path);
         }
 
-        public static void FillRoundedRectangle(this Graphics g, Brush brush,
-            Rectangle rect, float r)
+        public static void FillRoundedRectangle(this Graphics g, Brush brush, Rectangle rect, float radius)
         {
-            using var path = RoundedRectPath(rect.X, rect.Y, rect.Width, rect.Height, r);
+            using var path = RoundedRectPath(rect.X, rect.Y, rect.Width, rect.Height, radius);
             g.FillPath(brush, path);
         }
 
-        private static GraphicsPath RoundedRectPath(float x, float y, float w, float h, float r)
+        private static GraphicsPath RoundedRectPath(float x, float y, float width, float height, float radius)
         {
-            float d = r * 2;
+            float diameter = radius * 2;
             var path = new GraphicsPath();
-            path.AddArc(x, y, d, d, 180, 90);
-            path.AddArc(x + w - d, y, d, d, 270, 90);
-            path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
-            path.AddArc(x, y + h - d, d, d, 90, 90);
+            path.AddArc(x, y, diameter, diameter, 180, 90);
+            path.AddArc(x + width - diameter, y, diameter, diameter, 270, 90);
+            path.AddArc(x + width - diameter, y + height - diameter, diameter, diameter, 0, 90);
+            path.AddArc(x, y + height - diameter, diameter, diameter, 90, 90);
             path.CloseFigure();
             return path;
+        }
+    }
+
+    internal sealed class ModernScrollContainer : UserControl
+    {
+        private readonly Panel _content;
+        private readonly Color _trackColor;
+        private readonly Color _thumbColor;
+        private readonly Color _thumbHoverColor;
+        private readonly Color _thumbActiveColor;
+        private int _scrollOffset;
+        private int _maxScroll;
+        private bool _draggingThumb;
+        private bool _hoveringThumb;
+        private int _dragMouseOffset;
+
+        public ModernScrollContainer(Color backColor, Color trackColor, Color thumbColor)
+        {
+            DoubleBuffered = true;
+            BackColor = backColor;
+            _trackColor = Color.FromArgb(42, trackColor);
+            _thumbColor = thumbColor;
+            _thumbHoverColor = ControlPaint.Light(thumbColor, 0.15f);
+            _thumbActiveColor = ControlPaint.Light(thumbColor, 0.3f);
+
+            _content = new Panel
+            {
+                BackColor = backColor,
+                Location = Point.Empty
+            };
+
+            Controls.Add(_content);
+
+            _content.ControlAdded += (_, e) =>
+            {
+                if (e.Control != null)
+                {
+                    HookChild(e.Control);
+                }
+                RefreshScrollMetrics();
+            };
+            _content.ControlRemoved += (_, _) => RefreshScrollMetrics();
+            Resize += (_, _) => RefreshScrollMetrics();
+            MouseWheel += HandleMouseWheel;
+            _content.MouseWheel += HandleMouseWheel;
+        }
+
+        public Panel Content => _content;
+
+        public void RefreshScrollMetrics()
+        {
+            int viewportWidth = Math.Max(0, Width - ScrollbarReserveWidth());
+            int contentHeight = GetContentHeight();
+
+            _content.Width = viewportWidth;
+            _content.Height = Math.Max(Height, contentHeight);
+
+            _maxScroll = Math.Max(0, contentHeight - Height);
+            _scrollOffset = Math.Clamp(_scrollOffset, 0, _maxScroll);
+            _content.Location = new Point(0, -_scrollOffset);
+
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            if (_maxScroll <= 0)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            Rectangle trackRect = GetTrackRect();
+            using (var trackBrush = new SolidBrush(_trackColor))
+            {
+                e.Graphics.FillRoundedRectangle(trackBrush, trackRect, Scale(6));
+            }
+
+            Rectangle thumbRect = GetThumbRect();
+            Color thumbColor = _draggingThumb
+                ? _thumbActiveColor
+                : _hoveringThumb ? _thumbHoverColor : _thumbColor;
+
+            using var thumbBrush = new SolidBrush(thumbColor);
+            e.Graphics.FillRoundedRectangle(thumbBrush, thumbRect, Scale(6));
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+
+            if (_maxScroll <= 0)
+            {
+                return;
+            }
+
+            Rectangle thumbRect = GetThumbRect();
+            if (thumbRect.Contains(e.Location))
+            {
+                _draggingThumb = true;
+                _dragMouseOffset = e.Y - thumbRect.Y;
+                Capture = true;
+                Invalidate();
+                return;
+            }
+
+            Rectangle trackRect = GetTrackRect();
+            if (trackRect.Contains(e.Location))
+            {
+                int direction = e.Y < thumbRect.Y ? -1 : 1;
+                ScrollBy(direction * Math.Max(Height - Scale(40), Scale(80)));
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+
+            bool hover = _maxScroll > 0 && GetThumbRect().Contains(e.Location);
+            if (hover != _hoveringThumb)
+            {
+                _hoveringThumb = hover;
+                Invalidate();
+            }
+
+            if (!_draggingThumb)
+            {
+                return;
+            }
+
+            Rectangle trackRect = GetTrackRect();
+            Rectangle thumbRect = GetThumbRect();
+            int scrollRange = Math.Max(1, trackRect.Height - thumbRect.Height);
+            int thumbTop = Math.Clamp(e.Y - _dragMouseOffset, trackRect.Top, trackRect.Bottom - thumbRect.Height);
+            double ratio = (double)(thumbTop - trackRect.Top) / scrollRange;
+            _scrollOffset = (int)Math.Round(ratio * _maxScroll);
+            _content.Location = new Point(0, -_scrollOffset);
+            Invalidate();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (_draggingThumb)
+            {
+                _draggingThumb = false;
+                Capture = false;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            if (!_draggingThumb && _hoveringThumb)
+            {
+                _hoveringThumb = false;
+                Invalidate();
+            }
+        }
+
+        private void HandleMouseWheel(object? sender, MouseEventArgs e)
+        {
+            ScrollBy(-Math.Sign(e.Delta) * Scale(48));
+        }
+
+        private void ScrollBy(int delta)
+        {
+            if (_maxScroll <= 0)
+            {
+                return;
+            }
+
+            _scrollOffset = Math.Clamp(_scrollOffset + delta, 0, _maxScroll);
+            _content.Location = new Point(0, -_scrollOffset);
+            Invalidate();
+        }
+
+        private void HookChild(Control control)
+        {
+            control.MouseWheel += HandleMouseWheel;
+            control.LocationChanged += (_, _) => RefreshScrollMetrics();
+            control.SizeChanged += (_, _) => RefreshScrollMetrics();
+
+            foreach (Control child in control.Controls)
+            {
+                HookChild(child);
+            }
+
+            control.ControlAdded += (_, e) =>
+            {
+                if (e.Control != null)
+                {
+                    HookChild(e.Control);
+                }
+            };
+            control.ControlRemoved += (_, _) => RefreshScrollMetrics();
+        }
+
+        private int GetContentHeight()
+        {
+            int bottom = 0;
+            foreach (Control control in _content.Controls)
+            {
+                bottom = Math.Max(bottom, control.Bottom);
+            }
+
+            return bottom + Scale(16);
+        }
+
+        private Rectangle GetTrackRect()
+        {
+            int width = Scale(7);
+            int margin = Scale(6);
+            return new Rectangle(
+                Math.Max(0, Width - width - margin),
+                margin,
+                width,
+                Math.Max(0, Height - (margin * 2)));
+        }
+
+        private Rectangle GetThumbRect()
+        {
+            Rectangle trackRect = GetTrackRect();
+            if (_maxScroll <= 0 || trackRect.Height <= 0)
+            {
+                return Rectangle.Empty;
+            }
+
+            int contentHeight = Math.Max(1, _content.Height);
+            int thumbHeight = Math.Max(Scale(44), (int)Math.Round((double)trackRect.Height * Height / contentHeight));
+            thumbHeight = Math.Min(trackRect.Height, thumbHeight);
+            int travel = Math.Max(0, trackRect.Height - thumbHeight);
+            int thumbTop = trackRect.Top + (_maxScroll == 0 ? 0 : (int)Math.Round((double)_scrollOffset / _maxScroll * travel));
+
+            return new Rectangle(trackRect.X, thumbTop, trackRect.Width, thumbHeight);
+        }
+
+        private int ScrollbarReserveWidth()
+        {
+            return Scale(18);
+        }
+
+        private int Scale(int logicalPixels)
+        {
+            float dpi = DeviceDpi > 0 ? DeviceDpi : 96f;
+            return Math.Max(1, (int)Math.Round(logicalPixels * (dpi / 96f)));
         }
     }
 }

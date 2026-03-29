@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace HwMonTray
@@ -33,6 +34,11 @@ namespace HwMonTray
     /// </summary>
     public class OverlayConfig
     {
+        public const string BackgroundSolid = "Solid";
+        public const string BackgroundNone = "None";
+        public const string RamDisplayUsedAndTotal = "UsedAndTotal";
+        public const string RamDisplayPercentage = "Percentage";
+
         public bool Enabled { get; set; } = false;
 
         // Hotkey (Win32 RegisterHotKey values)
@@ -46,7 +52,15 @@ namespace HwMonTray
         public int OffsetY { get; set; } = 20;
         public float Opacity { get; set; } = 0.85f;
         public float FontSize { get; set; } = 11f;
+        public string FontFamily { get; set; } = "Segoe UI";
+        public string BackgroundMode { get; set; } = BackgroundSolid;
+        public bool ShowTextShadow { get; set; } = true;
         public bool ShowBorder { get; set; } = true;
+        public string RamDisplayMode { get; set; } = RamDisplayUsedAndTotal;
+        public int SettingsWindowX { get; set; } = -1;
+        public int SettingsWindowY { get; set; } = -1;
+        public int SettingsWindowWidth { get; set; } = 420;
+        public int SettingsWindowHeight { get; set; } = 840;
 
         // Which metrics to show
         public List<OverlayMetric> Metrics { get; set; } = DefaultMetrics();
@@ -75,6 +89,24 @@ namespace HwMonTray
                 "BottomRight" => OverlayPosition.BottomRight,
                 _ => OverlayPosition.TopRight
             };
+        }
+
+        public bool ShowRamAsPercentage()
+        {
+            return string.Equals(RamDisplayMode, RamDisplayPercentage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool HasBackground()
+        {
+            return !string.Equals(BackgroundMode, BackgroundNone, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool HasSavedSettingsWindowBounds()
+        {
+            return SettingsWindowX >= 0 &&
+                   SettingsWindowY >= 0 &&
+                   SettingsWindowWidth >= 320 &&
+                   SettingsWindowHeight >= 480;
         }
     }
 }

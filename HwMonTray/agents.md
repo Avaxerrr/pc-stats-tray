@@ -19,11 +19,24 @@ Run the executable directly from an **elevated** PowerShell window:
 ```
 
 ### Production Release Build
-To generate the **~3MB** standalone, single-file release (Framework-Dependent), use:
+Use the standard .NET publish location and do not invent ad-hoc output folders unless the normal publish folder is locked by a running process.
+Default publish output path:
+```text
+.\bin\Release\net10.0-windows\win-x64\publish\
+```
+To generate the framework-dependent release build, use:
 ```powershell
 dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=false
 ```
 *Note: Do NOT omit `-p:SelfContained=false` on newer .NET versions, otherwise the build will pack the entire ~100MB .NET runtime into the executable.*
+If publishing with `-r win-x64`, run a runtime-specific restore first when needed:
+```powershell
+dotnet restore -r win-x64
+```
+Run the published executable from:
+```powershell
+& ".\bin\Release\net10.0-windows\win-x64\publish\HwMonTray.exe"
+```
 
 ## 3. UI and Rendering Caveats
 
@@ -40,4 +53,4 @@ All settings are stored in `hwmon_config.json`. The persistence logic resides co
 
 ## 5. UI Aesthetics
 - **Color Palette**: Dark mode exclusively. Backgrounds are deep grays/blacks (`#1A1A1E`), borders are slightly lighter (`#2C2C30`), and interactive text is brightly colored with the Accent (Blue/Cyan/Green).
-- **Typography**: `Segoe UI` exclusively (do not fallback to `Microsoft Sans Serif`). Use bold weights for numbers and uppercase labels.
+- **Typography**: Default to `Segoe UI`, but preserve support for the user-selectable OSD font list in settings. Use bold weights for numbers and uppercase labels.
