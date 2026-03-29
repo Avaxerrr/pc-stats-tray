@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PC Stats Tray</title>
+  <meta name="description" content="A lightweight Windows tray and overlay monitor for temps, usage, and in-game RTSS stats.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Windows hardware monitoring</p>
+        <h1>PC Stats Tray</h1>
+        <p class="lead">
+          A lightweight Windows app that shows PC stats in the tray, on the desktop,
+          and inside games through RTSS.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Download latest build</a>
+          <a class="button button-secondary" href="https://github.com/Avaxerrr/pc-stats-tray">View on GitHub</a>
+        </div>
+        <ul class="quick-points">
+          <li>Small tray icon with live temperature</li>
+          <li>Desktop overlay with font, shadow, outline, and layout controls</li>
+          <li>Optional RTSS support for in-game on-screen display</li>
+        </ul>
+      </div>
+      <div class="hero-panel">
+        <div class="mini-card">
+          <h2>What you need</h2>
+          <p><strong>Desktop only:</strong> the app plus the .NET 10 Desktop Runtime.</p>
+          <p><strong>In-game overlay:</strong> the app, the .NET 10 Desktop Runtime, and RTSS.</p>
+          <div class="mini-links">
+            <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0">Download .NET 10</a>
+            <a href="https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/">Download RTSS</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section grid-two">
+        <article class="card">
+          <h2>Quick setup</h2>
+          <ol>
+            <li>Install the .NET 10 Desktop Runtime.</li>
+            <li>Run <code>PCStatsTray.exe</code>.</li>
+            <li>Right-click the tray icon and open <code>OSD Settings</code>.</li>
+            <li>Turn on <code>Desktop OSD</code> for the desktop overlay.</li>
+            <li>Turn on <code>RTSS OSD (Games)</code> only if RTSS is installed and running.</li>
+          </ol>
+        </article>
+
+        <article class="card">
+          <h2>How RTSS fits in</h2>
+          <p>
+            PC Stats Tray collects and formats the hardware data.
+            RTSS is the separate tool that draws that text inside supported games.
+          </p>
+          <p>
+            If you want the in-game overlay, open RTSS and make sure
+            <code>Show On-Screen Display</code> is enabled.
+          </p>
+        </article>
+      </section>
+
+      <section class="section screenshots">
+        <div class="section-heading">
+          <p class="eyebrow">Screenshots</p>
+          <h2>Designed for quick visibility</h2>
+        </div>
+
+        <div class="shot-grid">
+          <figure class="shot-card">
+            <img src="assets/screenshots/overlay-screenshot.png" alt="Desktop overlay screenshot">
+            <figcaption>Desktop overlay with grouped hardware metrics</figcaption>
+          </figure>
+          <figure class="shot-card">
+            <img src="assets/screenshots/OSD-settings.png" alt="OSD settings screenshot">
+            <figcaption>OSD settings with desktop and RTSS options</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section grid-two">
+        <article class="card">
+          <h2>Features</h2>
+          <ul>
+            <li>Tray temperature readout</li>
+            <li>Desktop overlay with live preview</li>
+            <li>RTSS output for games</li>
+            <li>Hotkeys for toggling the OSD and opening settings</li>
+            <li>CPU, GPU, RAM, network, storage, and fan metrics</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Project info</h2>
+          <ul>
+            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Latest release</a></li>
+            <li><a href="https://github.com/Avaxerrr/pc-stats-tray">Source code</a></li>
+            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/actions/workflows/build-release.yml">Build workflow</a></li>
+            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/blob/master/README.md">Full README</a></li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

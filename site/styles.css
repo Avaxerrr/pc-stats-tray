@@ -1,0 +1,260 @@
+:root {
+  --bg: #0d1117;
+  --bg-elevated: rgba(18, 24, 33, 0.86);
+  --bg-card: rgba(22, 29, 40, 0.9);
+  --line: rgba(116, 144, 180, 0.24);
+  --text: #edf3fa;
+  --text-dim: #a6b2c2;
+  --accent: #46c37b;
+  --accent-strong: #1992ff;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(25, 146, 255, 0.16), transparent 32%),
+    radial-gradient(circle at top right, rgba(70, 195, 123, 0.12), transparent 30%),
+    linear-gradient(180deg, #091018 0%, #0d1117 42%, #0f1720 100%);
+  font-family: "Segoe UI Variable", "Bahnschrift", "Segoe UI", sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black, transparent 82%);
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 64px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.35fr 0.85fr;
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 32px;
+}
+
+.hero-copy,
+.hero-panel,
+.card,
+.shot-card {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.hero-copy {
+  padding: 36px;
+}
+
+.hero-panel {
+  padding: 18px;
+  display: flex;
+}
+
+.mini-card {
+  border-radius: 18px;
+  width: 100%;
+  padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(25, 146, 255, 0.12), rgba(22, 29, 40, 0.86)),
+    var(--bg-card);
+  border: 1px solid rgba(116, 144, 180, 0.22);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 1.05;
+}
+
+h1 {
+  font-size: clamp(2.8rem, 7vw, 5rem);
+  letter-spacing: -0.05em;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  margin-bottom: 14px;
+}
+
+.lead {
+  margin: 18px 0 0;
+  color: var(--text-dim);
+  font-size: 1.08rem;
+  line-height: 1.75;
+  max-width: 40rem;
+}
+
+.hero-actions,
+.mini-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-actions {
+  margin-top: 24px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  color: #061018;
+  background: linear-gradient(135deg, #46c37b, #7fe7aa);
+}
+
+.button-secondary {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.quick-points,
+.card ul,
+.card ol {
+  margin: 22px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+
+.mini-card p {
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.mini-links {
+  margin-top: 18px;
+}
+
+.mini-links a,
+.card a {
+  color: #8dc8ff;
+}
+
+.section {
+  margin-top: 24px;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.card {
+  padding: 28px;
+}
+
+.section-heading {
+  margin-bottom: 18px;
+}
+
+.shot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.shot-card {
+  padding: 18px;
+  background: var(--bg-card);
+}
+
+.shot-card img {
+  display: block;
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.shot-card figcaption {
+  margin-top: 12px;
+  color: var(--text-dim);
+  font-size: 0.94rem;
+}
+
+code {
+  padding: 0.14rem 0.38rem;
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.07);
+  font-family: "Consolas", "Cascadia Mono", monospace;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .grid-two,
+  .shot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy {
+    padding: 28px;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-shell {
+    width: min(100% - 20px, 1120px);
+    padding-top: 20px;
+  }
+
+  .hero-copy,
+  .hero-panel,
+  .card,
+  .shot-card {
+    border-radius: 20px;
+  }
+
+  .card,
+  .mini-card,
+  .shot-card {
+    padding: 20px;
+  }
+}
