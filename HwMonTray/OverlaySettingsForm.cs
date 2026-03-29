@@ -30,12 +30,8 @@ namespace HwMonTray
 
         private TextBox _toggleHotkeyBox = null!;
         private TextBox _settingsHotkeyBox = null!;
-        private int _capturedToggleMods;
-        private int _capturedToggleVk;
-        private string _capturedToggleDisplay = "";
-        private int _capturedSettingsMods;
-        private int _capturedSettingsVk;
-        private string _capturedSettingsDisplay = "";
+        private HotkeyBinding _capturedToggleHotkey;
+        private HotkeyBinding _capturedSettingsHotkey;
         private TextBox? _activeHotkeyBox;
         private HotkeyCaptureTarget _activeHotkeyTarget;
         private bool _isCapturing;
@@ -81,12 +77,8 @@ namespace HwMonTray
             _onSave = onSave;
             _computer.Accept(new UpdateVisitor());
             _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
-            _capturedToggleMods = config.HotkeyModifiers;
-            _capturedToggleVk = config.HotkeyVk;
-            _capturedToggleDisplay = config.HotkeyDisplay;
-            _capturedSettingsMods = config.SettingsHotkeyModifiers;
-            _capturedSettingsVk = config.SettingsHotkeyVk;
-            _capturedSettingsDisplay = config.SettingsHotkeyDisplay;
+            _capturedToggleHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
+            _capturedSettingsHotkey = HotkeyBinding.FromStored(config.SettingsHotkeyModifiers, config.SettingsHotkeyVk, config.SettingsHotkeyDisplay);
             (_alignRight, _alignBottom) = config.Position switch
             {
                 "TopLeft" => (false, false),
@@ -136,13 +128,13 @@ namespace HwMonTray
 
             var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(150), cardWidth, marginX);
             hotkeyCard.Controls.Add(MakeLabel("Toggle OSD", Ui(16), Ui(42)));
-            _toggleHotkeyBox = MakeHotkeyBox(_capturedToggleDisplay, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
-            WireHotkeyCapture(_toggleHotkeyBox, HotkeyCaptureTarget.ToggleOsd, () => string.IsNullOrEmpty(_capturedToggleDisplay) ? _config.HotkeyDisplay : _capturedToggleDisplay);
+            _toggleHotkeyBox = MakeHotkeyBox(_capturedToggleHotkey.Display, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_toggleHotkeyBox, HotkeyCaptureTarget.ToggleOsd, () => _capturedToggleHotkey.IsEmpty ? _config.HotkeyDisplay : _capturedToggleHotkey.Display);
             hotkeyCard.Controls.Add(_toggleHotkeyBox);
 
             hotkeyCard.Controls.Add(MakeLabel("Open settings", Ui(16), Ui(92)));
-            _settingsHotkeyBox = MakeHotkeyBox(_capturedSettingsDisplay, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
-            WireHotkeyCapture(_settingsHotkeyBox, HotkeyCaptureTarget.OpenSettings, () => string.IsNullOrEmpty(_capturedSettingsDisplay) ? _config.SettingsHotkeyDisplay : _capturedSettingsDisplay);
+            _settingsHotkeyBox = MakeHotkeyBox(_capturedSettingsHotkey.Display, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_settingsHotkeyBox, HotkeyCaptureTarget.OpenSettings, () => _capturedSettingsHotkey.IsEmpty ? _config.SettingsHotkeyDisplay : _capturedSettingsHotkey.Display);
             hotkeyCard.Controls.Add(_settingsHotkeyBox);
 
             var outputCard = MakeCard(content, "Output", ref y, Ui(296), cardWidth, marginX);
@@ -428,38 +420,26 @@ namespace HwMonTray
             e.SuppressKeyPress = true;
             e.Handled = true;
 
-            if (e.KeyCode is Keys.ControlKey or Keys.ShiftKey or Keys.Menu or Keys.LWin or Keys.RWin)
+            if (!HotkeyCaptureHelper.TryBuild(e.KeyCode, e.Control, e.Alt, e.Shift, out var binding, out var message))
             {
+                if (message == "Need a modifier key")
+                {
+                    _activeHotkeyBox.Text = message;
+                }
+
                 return;
             }
 
-            int mods = 0;
-            string display = "";
-            if (e.Control) { mods |= 0x0002; display += "Ctrl+"; }
-            if (e.Alt) { mods |= 0x0001; display += "Alt+"; }
-            if (e.Shift) { mods |= 0x0004; display += "Shift+"; }
-
-            if (mods == 0)
-            {
-                _activeHotkeyBox.Text = "Need a modifier key";
-                return;
-            }
-
-            display += e.KeyCode;
             if (_activeHotkeyTarget == HotkeyCaptureTarget.ToggleOsd)
             {
-                _capturedToggleMods = mods;
-                _capturedToggleVk = (int)e.KeyCode;
-                _capturedToggleDisplay = display;
+                _capturedToggleHotkey = binding;
             }
             else
             {
-                _capturedSettingsMods = mods;
-                _capturedSettingsVk = (int)e.KeyCode;
-                _capturedSettingsDisplay = display;
+                _capturedSettingsHotkey = binding;
             }
 
-            _activeHotkeyBox.Text = display;
+            _activeHotkeyBox.Text = binding.Display;
             _activeHotkeyBox.ForeColor = AccentGreen;
             _isCapturing = false;
             _activeHotkeyBox = null;
@@ -473,12 +453,19 @@ namespace HwMonTray
 
         private void CommitConfig()
         {
-            _config.HotkeyDisplay = string.IsNullOrWhiteSpace(_capturedToggleDisplay) ? _config.HotkeyDisplay : _capturedToggleDisplay;
-            _config.HotkeyModifiers = _capturedToggleMods == 0 ? _config.HotkeyModifiers : _capturedToggleMods;
-            _config.HotkeyVk = _capturedToggleVk == 0 ? _config.HotkeyVk : _capturedToggleVk;
-            _config.SettingsHotkeyDisplay = string.IsNullOrWhiteSpace(_capturedSettingsDisplay) ? _config.SettingsHotkeyDisplay : _capturedSettingsDisplay;
-            _config.SettingsHotkeyModifiers = _capturedSettingsMods == 0 ? _config.SettingsHotkeyModifiers : _capturedSettingsMods;
-            _config.SettingsHotkeyVk = _capturedSettingsVk == 0 ? _config.SettingsHotkeyVk : _capturedSettingsVk;
+            if (!_capturedToggleHotkey.IsEmpty)
+            {
+                _config.HotkeyDisplay = _capturedToggleHotkey.Display;
+                _config.HotkeyModifiers = _capturedToggleHotkey.Modifiers;
+                _config.HotkeyVk = _capturedToggleHotkey.VirtualKey;
+            }
+
+            if (!_capturedSettingsHotkey.IsEmpty)
+            {
+                _config.SettingsHotkeyDisplay = _capturedSettingsHotkey.Display;
+                _config.SettingsHotkeyModifiers = _capturedSettingsHotkey.Modifiers;
+                _config.SettingsHotkeyVk = _capturedSettingsHotkey.VirtualKey;
+            }
 
             _config.Enabled = _enabledCheck.Checked;
             _config.DesktopOverlayEnabled = _desktopOverlayCheck.Checked;
@@ -533,28 +520,12 @@ namespace HwMonTray
             _desktopOverlayCheck.Enabled = enabled;
             _rtssOverlayCheck.Enabled = enabled;
             _copyRtssDebugButton.Enabled = enabled && _rtssOverlayCheck.Checked;
-
-            if (!enabled)
-            {
-                _outputStatusBox.Text = "OSD is currently off." + Environment.NewLine + "Enable it here or use the tray toggle/hotkey.";
-                _outputStatusBox.ForeColor = Color.FromArgb(255, 195, 70);
-                return;
-            }
-
-            if (_rtssOverlayCheck.Checked)
-            {
-                var snapshot = RtssOverlayClient.GetStatusSnapshot();
-                _outputStatusBox.Text = snapshot.Status;
-                _outputStatusBox.ForeColor = snapshot.IsProcessRunning && snapshot.HasSharedMemory && snapshot.IsSlotOwned
-                    ? AccentGreen
-                    : Color.FromArgb(255, 195, 70);
-                return;
-            }
-
-            _outputStatusBox.Text = _desktopOverlayCheck.Checked
-                ? "Desktop OSD is enabled."
-                : "No output backend is enabled.";
-            _outputStatusBox.ForeColor = _desktopOverlayCheck.Checked ? AccentGreen : Color.FromArgb(255, 195, 70);
+            var snapshot = enabled && _rtssOverlayCheck.Checked ? RtssOverlayClient.GetStatusSnapshot() : null;
+            var state = OverlaySettingsOutputStateBuilder.Build(enabled, _desktopOverlayCheck.Checked, _rtssOverlayCheck.Checked, snapshot);
+            _outputStatusBox.Text = state.Text;
+            _outputStatusBox.ForeColor = state.Tone == OverlaySettingsOutputTone.Success
+                ? AccentGreen
+                : Color.FromArgb(255, 195, 70);
         }
 
         private Panel MakeCard(Control parent, string title, ref int y, int height, int width, int marginX)
