@@ -332,6 +332,16 @@ namespace HwMonTray
             ISensor? gpuFan = null;
             ISensor? caseFan = null;
 
+            var fanSensors = new Dictionary<string, ISensor>(StringComparer.OrdinalIgnoreCase);
+            foreach (var hardware in _computer.Hardware)
+            {
+                CollectFanSensorsByKeyRecursive(hardware, fanSensors);
+            }
+
+            cpuFan = ResolveConfiguredFan(_config.CpuFanSensorKey, fanSensors);
+            gpuFan = ResolveConfiguredFan(_config.GpuFanSensorKey, fanSensors);
+            caseFan = ResolveConfiguredFan(_config.CaseFanSensorKey, fanSensors);
+
             foreach (var hardware in _computer.Hardware)
             {
                 CollectFanMetricsRecursive(hardware, ref cpuFan, ref gpuFan, ref caseFan);
@@ -351,6 +361,34 @@ namespace HwMonTray
             {
                 _currentValues["CaseFan"] = $"{caseFan.Value.Value:0} RPM";
             }
+        }
+
+        private void CollectFanSensorsByKeyRecursive(IHardware hardware, Dictionary<string, ISensor> fanSensors)
+        {
+            foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Fan))
+            {
+                fanSensors[SensorIdentity.GetSensorKey(sensor)] = sensor;
+            }
+
+            foreach (var subHardware in hardware.SubHardware)
+            {
+                CollectFanSensorsByKeyRecursive(subHardware, fanSensors);
+            }
+        }
+
+        private ISensor? ResolveConfiguredFan(string sensorKey, Dictionary<string, ISensor> fanSensors)
+        {
+            if (string.IsNullOrWhiteSpace(sensorKey))
+            {
+                return null;
+            }
+
+            if (fanSensors.TryGetValue(sensorKey, out var sensor) && sensor.Value.HasValue)
+            {
+                return sensor;
+            }
+
+            return null;
         }
 
         private void CollectFanMetricsRecursive(IHardware hardware, ref ISensor? cpuFan, ref ISensor? gpuFan, ref ISensor? caseFan)

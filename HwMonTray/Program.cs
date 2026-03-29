@@ -30,12 +30,14 @@ namespace HwMonTray
         private static ContextMenuStrip contextMenu = null!;
         private static System.Windows.Forms.Timer timer = null!;
         private static DetailsForm? detailsForm;
+        private static OverlaySettingsForm? settingsForm;
 
         // OSD Overlay
         private static OverlayForm? overlayForm;
         private static OverlayConfig overlayConfig = null!;
         private static HotkeyWindow? hotkeyWindow;
         private static RtssOverlayClient? rtssOverlayClient;
+        private static ToolStripMenuItem? rtssStatusItem;
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -151,11 +153,14 @@ namespace HwMonTray
             toggleOsdItem.Click += (s, e) => ToggleOverlay();
             contextMenu.Items.Add(toggleOsdItem);
 
-            contextMenu.Items.Add("OSD Settings…", null, (s, e) =>
+            contextMenu.Items.Add($"OSD Settings…  ({overlayConfig.SettingsHotkeyDisplay})", null, (s, e) => OpenOverlaySettings());
+
+            rtssStatusItem = new ToolStripMenuItem("RTSS: checking…")
             {
-                var settingsForm = new OverlaySettingsForm(overlayConfig, OnOverlayConfigSaved);
-                settingsForm.ShowDialog();
-            });
+                Enabled = false
+            };
+            contextMenu.Items.Add(rtssStatusItem);
+            UpdateRtssStatusMenu();
 
             contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -187,9 +192,17 @@ namespace HwMonTray
             SaveOverlayConfig(overlayConfig);
         }
 
-        private static void OnHotkeyPressed()
+        private static void OnHotkeyPressed(int hotkeyId)
         {
-            ToggleOverlay();
+            switch (hotkeyId)
+            {
+                case 1:
+                    ToggleOverlay();
+                    break;
+                case 2:
+                    OpenOverlaySettings();
+                    break;
+            }
         }
 
         private static void OnOverlayConfigSaved(OverlayConfig config)
@@ -220,6 +233,12 @@ namespace HwMonTray
                 HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 1,
                     (uint)overlayConfig.HotkeyModifiers, (uint)overlayConfig.HotkeyVk);
             }
+
+            if (hotkeyWindow != null && overlayConfig.SettingsHotkeyVk != 0)
+            {
+                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 2,
+                    (uint)overlayConfig.SettingsHotkeyModifiers, (uint)overlayConfig.SettingsHotkeyVk);
+            }
         }
 
         private static void UnregisterCurrentHotkey()
@@ -227,6 +246,7 @@ namespace HwMonTray
             if (hotkeyWindow != null)
             {
                 HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 1);
+                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 2);
             }
         }
 
@@ -364,6 +384,7 @@ namespace HwMonTray
             // Refresh overlay if visible
             overlayForm?.RefreshData();
             SyncRtssOverlay();
+            UpdateRtssStatusMenu();
         }
 
         private static void UpdateIcon()
@@ -517,6 +538,12 @@ namespace HwMonTray
                 overlayForm.Dispose();
             }
 
+            if (settingsForm != null && !settingsForm.IsDisposed)
+            {
+                settingsForm.Close();
+                settingsForm.Dispose();
+            }
+
              rtssOverlayClient?.Release();
              rtssOverlayClient?.Dispose();
 
@@ -594,6 +621,65 @@ namespace HwMonTray
                 rtssOverlayClient.Update(text);
             }
         }
+
+        private static void OpenOverlaySettings()
+        {
+            if (settingsForm == null || settingsForm.IsDisposed)
+            {
+                settingsForm = new OverlaySettingsForm(computer, overlayConfig, OnOverlayConfigSaved);
+            }
+
+            settingsForm.Show();
+            if (settingsForm.WindowState == FormWindowState.Minimized)
+            {
+                settingsForm.WindowState = FormWindowState.Normal;
+            }
+
+            settingsForm.BringToFront();
+            settingsForm.Activate();
+        }
+
+        private static void UpdateRtssStatusMenu()
+        {
+            if (rtssStatusItem == null)
+            {
+                return;
+            }
+
+            if (!overlayConfig.RtssOverlayEnabled)
+            {
+                rtssStatusItem.Text = "RTSS: disabled";
+                return;
+            }
+
+            var snapshot = RtssOverlayClient.GetStatusSnapshot();
+            if (!snapshot.IsProcessRunning)
+            {
+                rtssStatusItem.Text = "RTSS: not running";
+                return;
+            }
+
+            if (!snapshot.HasSharedMemory)
+            {
+                rtssStatusItem.Text = "RTSS: shared memory unavailable";
+                return;
+            }
+
+            if (!snapshot.IsSlotOwned)
+            {
+                rtssStatusItem.Text = "RTSS: waiting for slot";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.LastForegroundAppName))
+            {
+                string appName = Path.GetFileName(snapshot.LastForegroundAppName);
+                rtssStatusItem.Text = $"RTSS: {appName} ({snapshot.LastForegroundApi})";
+                return;
+            }
+
+            rtssStatusItem.Text = "RTSS: ready";
+        }
     }
 
     /// <summary>
@@ -603,7 +689,7 @@ namespace HwMonTray
     {
         private const int WM_HOTKEY = 0x0312;
 
-        public event Action? HotkeyPressed;
+        public event Action<int>? HotkeyPressed;
 
         [DllImport("user32.dll")]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -620,7 +706,7 @@ namespace HwMonTray
         {
             if (m.Msg == WM_HOTKEY)
             {
-                HotkeyPressed?.Invoke();
+                HotkeyPressed?.Invoke(m.WParam.ToInt32());
             }
             base.WndProc(ref m);
         }

@@ -45,6 +45,9 @@ namespace HwMonTray
         public string HotkeyDisplay { get; set; } = "Ctrl+Shift+O";
         public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
         public int HotkeyVk { get; set; } = 0x4F; // 'O'
+        public string SettingsHotkeyDisplay { get; set; } = "Ctrl+Shift+S";
+        public int SettingsHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
+        public int SettingsHotkeyVk { get; set; } = 0x53; // 'S'
 
         // Position & layout
         public bool DesktopOverlayEnabled { get; set; } = true;
@@ -65,6 +68,9 @@ namespace HwMonTray
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
         public int SettingsWindowHeight { get; set; } = 840;
+        public string CpuFanSensorKey { get; set; } = string.Empty;
+        public string GpuFanSensorKey { get; set; } = string.Empty;
+        public string CaseFanSensorKey { get; set; } = string.Empty;
 
         // Which metrics to show
         public List<OverlayMetric> Metrics { get; set; } = DefaultMetrics();
