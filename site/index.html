@@ -4,173 +4,148 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PC Stats Tray</title>
-  <meta name="description" content="A lightweight Windows tray and overlay monitor for temps, usage, and in-game RTSS stats.">
+  <meta name="description" content="A lightweight Windows app that shows PC hardware stats in the tray, on the desktop, and inside games through RTSS.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="ambient ambient-one"></div>
-  <div class="ambient ambient-two"></div>
-  <div class="scanlines"></div>
-
-  <div class="page-shell">
+  <div class="container">
     <header class="topbar">
       <a class="brand" href="https://github.com/Avaxerrr/pc-stats-tray">
-        <span class="brand-mark">P</span>
-        <span class="brand-text">PC Stats Tray</span>
+        <span class="brand-icon">SYS</span>
+        <span>PC Stats Tray</span>
       </a>
       <nav class="top-links">
-        <a href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Download</a>
-        <a href="https://github.com/Avaxerrr/pc-stats-tray">GitHub</a>
+        <a href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">DOWNLOAD_LATEST</a>
+        <a href="https://github.com/Avaxerrr/pc-stats-tray">GITHUB_REPO</a>
       </nav>
     </header>
 
-    <header class="hero">
-      <div class="hero-copy panel">
-        <p class="eyebrow">Desktop stats. In-game overlay. Zero dashboard clutter.</p>
-        <h1>PC Stats Tray</h1>
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="meta-row">
+          <span class="pill">SYS.REQ: WIN 10/11</span>
+          <span class="pill">ENV: .NET 10</span>
+          <span class="pill">HOOK: RTSS (OPTIONAL)</span>
+        </div>
+
+        <h1>PC Hardware<br>Monitoring.</h1>
         <p class="lead">
-          A lightweight Windows monitor that keeps hardware stats visible where they actually help:
-          the tray icon, the desktop overlay, and supported games through RTSS.
+          PC Stats Tray is a lightweight Windows utility that keeps your system vitals visible where they matter:
+          in the tray icon, on the desktop, or inside games through RTSS.
         </p>
 
-        <div class="status-strip">
-          <span class="status-pill">Windows 10 / 11</span>
-          <span class="status-pill">.NET 10</span>
-          <span class="status-pill">RTSS optional</span>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Initialize Download</a>
+          <a class="btn btn-secondary" href="https://github.com/Avaxerrr/pc-stats-tray">View Source</a>
         </div>
 
-        <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Download latest build</a>
-          <a class="button button-secondary" href="https://github.com/Avaxerrr/pc-stats-tray">View on GitHub</a>
-        </div>
-
-        <p class="byline">by <a href="https://github.com/Avaxerrr">Avaxerrr</a></p>
-
-        <ul class="quick-points">
-          <li>Live tray temperature readout</li>
-          <li>Desktop OSD with font, shadow, outline, and layout control</li>
-          <li>Optional RTSS output for in-game on-screen stats</li>
+        <ul class="tech-list">
+          <li>Live CPU and GPU temperatures in the tray icon</li>
+          <li>Desktop OSD with font, shadow, outline, and layout controls</li>
+          <li>Optional RTSS output for supported in-game overlays</li>
         </ul>
       </div>
 
-      <div class="hero-hud panel">
-        <div class="hud-screen">
-          <div class="hud-label">Telemetry preview</div>
-          <div class="hud-grid">
-            <div class="hud-metric">
-              <span class="hud-key">CPU</span>
-              <strong>71&deg;C</strong>
-            </div>
-            <div class="hud-metric">
-              <span class="hud-key">GPU</span>
-              <strong>64&deg;C</strong>
-            </div>
-            <div class="hud-metric">
-              <span class="hud-key">RAM</span>
-              <strong>47%</strong>
-            </div>
-            <div class="hud-metric">
-              <span class="hud-key">FPS OSD</span>
-              <strong>RTSS</strong>
-            </div>
+      <div class="screenshot-wrapper hero-wrapper">
+        <img src="assets/screenshots/overlay-screenshot.png" alt="PC Stats Tray desktop overlay">
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="panel">
+        <p class="eyebrow">Deployment Protocol</p>
+        <h2>Quick Setup</h2>
+        <ol class="tech-list">
+          <li>Install the <code>.NET 10 Desktop Runtime</code>.</li>
+          <li>Run <code>PCStatsTray.exe</code>.</li>
+          <li>Right-click the tray icon and open <code>OSD Settings</code>.</li>
+          <li>Turn on <code>Desktop OSD</code> for the desktop overlay.</li>
+          <li>Turn on <code>RTSS OSD (Games)</code> only if RTSS is installed and running.</li>
+        </ol>
+      </div>
+
+      <div class="panel">
+        <p class="eyebrow">Architecture</p>
+        <h2>The RTSS Bridge</h2>
+        <p class="panel-copy">
+          PC Stats Tray handles the hardware polling, metric formatting, and layout choices. RTSS is the renderer that
+          draws those metrics inside supported games.
+        </p>
+        <p class="panel-copy">
+          For the in-game overlay to appear, RTSS must be running with
+          <code>Show On-Screen Display</code> enabled in its profile.
+        </p>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="section-head">
+        <p class="eyebrow">Feature Set</p>
+        <h2>Built for fast visibility</h2>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Tray Stats</h3>
+          <p>Keep a live temperature readout visible in the tray without opening a full dashboard.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Desktop Overlay</h3>
+          <p>Show the metrics you care about with customizable fonts, opacity, shadow, outline, and position.</p>
+        </div>
+        <div class="feature-card">
+          <h3>RTSS Output</h3>
+          <p>Send the same selected metrics to RTSS for supported in-game overlays.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Quick Control</h3>
+          <p>Use hotkeys to toggle the OSD or open settings without digging through menus.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase">
+      <div class="section-head">
+        <p class="eyebrow">Visual Output</p>
+        <h2>Readable overlays, minimal clutter</h2>
+      </div>
+
+      <div class="shots">
+        <div class="shot">
+          <div class="screenshot-wrapper screenshot-desktop">
+            <img src="assets/screenshots/overlay-screenshot.png" alt="Desktop OSD overlay">
           </div>
-          <div class="hud-console">
-            <div><span class="console-key">Desktop:</span> Enabled</div>
-            <div><span class="console-key">Games:</span> Routed through RTSS</div>
-            <div><span class="console-key">Hotkeys:</span> Toggle + Open settings</div>
+          <div class="shot-info">
+            <strong>Desktop OSD Layer</strong>
+            <span>Pin vital stats to your desktop with a compact overlay that stays readable without taking over the screen.</span>
+          </div>
+        </div>
+
+        <div class="shot">
+          <div class="screenshot-wrapper screenshot-settings">
+            <img src="assets/screenshots/OSD-settings.png" alt="OSD settings menu">
+          </div>
+          <div class="shot-info">
+            <strong>Configuration</strong>
+            <span>Adjust metrics, output mode, hotkeys, text styling, and layout from one focused settings panel.</span>
           </div>
         </div>
       </div>
-    </header>
+    </section>
 
-    <main>
-      <section class="section intro-grid">
-        <article class="card feature-card">
-          <p class="eyebrow">Start here</p>
-          <h2>What you need</h2>
-          <div class="requirement-list">
-            <div class="requirement-item">
-              <span class="req-tag">Desktop only</span>
-              <p>Install the app and the .NET 10 Desktop Runtime.</p>
-            </div>
-            <div class="requirement-item">
-              <span class="req-tag">In-game OSD</span>
-              <p>Install the app, the .NET 10 Desktop Runtime, and RTSS.</p>
-            </div>
-          </div>
-          <div class="mini-links">
-            <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0">Download .NET 10</a>
-            <a href="https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/">Download RTSS</a>
-          </div>
-        </article>
-
-        <article class="card steps-card">
-          <p class="eyebrow">Quick setup</p>
-          <h2>Be up and running in minutes</h2>
-          <ol class="step-list">
-            <li>Install the .NET 10 Desktop Runtime.</li>
-            <li>Run <code>PCStatsTray.exe</code>.</li>
-            <li>Right-click the tray icon and open <code>OSD Settings</code>.</li>
-            <li>Turn on <code>Desktop OSD</code> for the desktop overlay.</li>
-            <li>Turn on <code>RTSS OSD (Games)</code> only if RTSS is installed and running.</li>
-          </ol>
-        </article>
-      </section>
-
-      <section class="section showcase">
-        <div class="section-heading">
-          <p class="eyebrow">Screenshots</p>
-          <h2>Designed to stay visible without taking over your screen</h2>
-        </div>
-
-        <div class="showcase-grid">
-          <figure class="showcase-shot primary-shot">
-            <img src="assets/screenshots/overlay-screenshot.png" alt="Desktop overlay screenshot">
-            <figcaption>
-              <strong>Desktop overlay</strong>
-              <span>Keep grouped hardware metrics on-screen with a compact OSD.</span>
-            </figcaption>
-          </figure>
-
-          <figure class="showcase-shot secondary-shot">
-            <img src="assets/screenshots/OSD-settings.png" alt="OSD settings screenshot">
-            <figcaption>
-              <strong>OSD settings</strong>
-              <span>Configure desktop output, RTSS output, hotkeys, styling, and metrics.</span>
-            </figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section class="section utility-grid">
-        <article class="card">
-          <p class="eyebrow">Game overlay</p>
-          <h2>How RTSS fits in</h2>
-          <p>
-            PC Stats Tray collects and formats the hardware data.
-            RTSS is the separate tool that draws that text inside supported games.
-          </p>
-          <p>
-            If you want the in-game overlay, open RTSS and make sure
-            <code>Show On-Screen Display</code> is enabled.
-          </p>
-        </article>
-
-        <article class="card">
-          <p class="eyebrow">Project info</p>
-          <h2>Links</h2>
-          <ul class="link-list">
-            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/releases/latest">Latest release</a></li>
-            <li><a href="https://github.com/Avaxerrr/pc-stats-tray">Source code</a></li>
-            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/actions/workflows/build-release.yml">Build workflow</a></li>
-            <li><a href="https://github.com/Avaxerrr/pc-stats-tray/blob/master/README.md">Full README</a></li>
-          </ul>
-        </article>
-      </section>
-    </main>
+    <footer class="footer">
+      <div>
+        Created by <a href="https://github.com/Avaxerrr">Avaxerrr</a> // PC Stats Tray
+      </div>
+      <div class="footer-links">
+        <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0" target="_blank" rel="noreferrer">REQ: .NET 10</a>
+        <a href="https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/" target="_blank" rel="noreferrer">REQ: RTSS</a>
+        <a href="https://github.com/Avaxerrr/pc-stats-tray/blob/master/README.md" target="_blank" rel="noreferrer">DOCS</a>
+      </div>
+    </footer>
   </div>
 </body>
 </html>
