@@ -39,6 +39,7 @@ namespace PCStatsTray
         private TextBox? _activeHotkeyBox;
         private HotkeyCaptureTarget _activeHotkeyTarget;
         private bool _isCapturing;
+        private bool _suspendLiveApply;
 
         private bool _alignRight;
         private bool _alignBottom;
@@ -424,11 +425,10 @@ namespace PCStatsTray
                 e.Graphics.DrawLine(pen, 0, 0, bottom.Width, 0);
             };
 
-            var saveButton = MakeButton("Save", Ui(24), Ui(14), Ui(104), Ui(34), AccentGreen, Color.FromArgb(10, 10, 10), FontStyle.Bold);
-            saveButton.Click += (_, _) =>
+            var resetButton = MakeButton("Reset", Ui(24), Ui(14), Ui(104), Ui(34), Color.FromArgb(160, 96, 32), Color.White, FontStyle.Bold);
+            resetButton.Click += (_, _) =>
             {
-                CommitConfig();
-                _onSave(_config);
+                ResetToDefaults();
             };
 
             var closeButton = MakeButton("Close", Ui(136), Ui(14), Ui(84), Ui(34), Color.FromArgb(50, 52, 60), FgPrimary, FontStyle.Regular);
@@ -444,7 +444,7 @@ namespace PCStatsTray
                 BackColor = Color.Transparent
             };
 
-            bottom.Controls.Add(saveButton);
+            bottom.Controls.Add(resetButton);
             bottom.Controls.Add(closeButton);
             bottom.Controls.Add(liveLabel);
 
@@ -492,10 +492,16 @@ namespace PCStatsTray
             _activeHotkeyBox.ForeColor = AccentGreen;
             _isCapturing = false;
             _activeHotkeyBox = null;
+            ApplyLive();
         }
 
         private void ApplyLive()
         {
+            if (_suspendLiveApply)
+            {
+                return;
+            }
+
             CommitConfig();
             _onSave(_config);
         }
@@ -533,6 +539,177 @@ namespace PCStatsTray
             };
 
             OverlaySettingsConfigMapper.Apply(_config, state);
+        }
+
+        private void ResetToDefaults()
+        {
+            var result = MessageBox.Show(
+                this,
+                "Reset all OSD settings to defaults? Window size and position will be kept.",
+                "Reset OSD Settings",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result != DialogResult.Yes)
+            {
+                return;
+            }
+
+            var defaults = new OverlayConfig();
+            defaults.NormalizeMetrics();
+            PreserveWindowBounds(defaults);
+            CopyConfig(defaults, _config);
+            SyncControlsFromConfig();
+            _onSave(_config);
+        }
+
+        private void SyncControlsFromConfig()
+        {
+            _suspendLiveApply = true;
+            try
+            {
+                _capturedToggleAllHotkey = HotkeyBinding.FromStored(_config.HotkeyModifiers, _config.HotkeyVk, _config.HotkeyDisplay);
+                _capturedToggleDesktopHotkey = HotkeyBinding.FromStored(_config.DesktopHotkeyModifiers, _config.DesktopHotkeyVk, _config.DesktopHotkeyDisplay);
+                _capturedToggleRtssHotkey = HotkeyBinding.FromStored(_config.RtssHotkeyModifiers, _config.RtssHotkeyVk, _config.RtssHotkeyDisplay);
+                _capturedSettingsHotkey = HotkeyBinding.FromStored(_config.SettingsHotkeyModifiers, _config.SettingsHotkeyVk, _config.SettingsHotkeyDisplay);
+
+                SetHotkeyBoxDisplay(_toggleAllHotkeyBox, _capturedToggleAllHotkey.Display);
+                SetHotkeyBoxDisplay(_toggleDesktopHotkeyBox, _capturedToggleDesktopHotkey.Display);
+                SetHotkeyBoxDisplay(_toggleRtssHotkeyBox, _capturedToggleRtssHotkey.Display);
+                SetHotkeyBoxDisplay(_settingsHotkeyBox, _capturedSettingsHotkey.Display);
+
+                _enabledCheck.Checked = _config.Enabled;
+                _desktopOverlayCheck.Checked = _config.DesktopOverlayEnabled;
+                _rtssOverlayCheck.Checked = _config.RtssOverlayEnabled;
+
+                (_alignRight, _alignBottom) = _config.Position switch
+                {
+                    "TopLeft" => (false, false),
+                    "TopRight" => (true, false),
+                    "BottomLeft" => (false, true),
+                    "BottomRight" => (true, true),
+                    _ => (true, false)
+                };
+                UpdatePositionButtons();
+
+                _horizontalMarginSlider.Value = Math.Clamp(_config.OffsetX, _horizontalMarginSlider.Minimum, _horizontalMarginSlider.Maximum);
+                _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
+                _verticalMarginSlider.Value = Math.Clamp(_config.OffsetY, _verticalMarginSlider.Minimum, _verticalMarginSlider.Maximum);
+                _verticalMarginValue.Text = $"{_verticalMarginSlider.Value} px";
+
+                _backgroundModeBox.SelectedIndex = _config.HasBackground() ? 0 : 1;
+                _opacitySlider.Value = Math.Clamp((int)Math.Round(_config.Opacity * 100f), _opacitySlider.Minimum, _opacitySlider.Maximum);
+                _opacityValue.Text = $"{_opacitySlider.Value}%";
+                _fontSlider.Value = Math.Clamp((int)Math.Round(_config.FontSize), _fontSlider.Minimum, _fontSlider.Maximum);
+                _fontValue.Text = $"{_fontSlider.Value} pt";
+                SelectComboValue(_fontFamilyBox, _config.FontFamily);
+
+                _shadowCheck.Checked = _config.ShowTextShadow;
+                _borderCheck.Checked = _config.ShowBorder;
+                _outlineCheck.Checked = _config.ShowTextOutline;
+                _outlineThicknessSlider.Value = Math.Clamp(_config.TextOutlineThickness, _outlineThicknessSlider.Minimum, _outlineThicknessSlider.Maximum);
+                _outlineThicknessValue.Text = $"{_outlineThicknessSlider.Value}px";
+
+                _ramDisplayModeBox.SelectedIndex = _config.ShowRamAsPercentage() ? 1 : 0;
+                _vramDisplayModeBox.SelectedIndex = _config.ShowVramAsPercentage() ? 1 : 0;
+
+                PopulateFanSensorChoices();
+
+                for (int i = 0; i < _config.Metrics.Count && i < _desktopMetricChecks.Length; i++)
+                {
+                    _desktopMetricChecks[i].Checked = _config.Metrics[i].IsEnabledFor(OverlayDisplayTarget.Desktop);
+                    _rtssMetricChecks[i].Checked = _config.Metrics[i].IsEnabledFor(OverlayDisplayTarget.Rtss);
+                }
+
+                UpdateAppearanceState();
+                UpdateOutputState();
+            }
+            finally
+            {
+                _suspendLiveApply = false;
+            }
+        }
+
+        private void SetHotkeyBoxDisplay(TextBox box, string text)
+        {
+            box.ForeColor = Accent;
+            box.Text = text;
+        }
+
+        private void PreserveWindowBounds(OverlayConfig target)
+        {
+            if (WindowState == FormWindowState.Normal)
+            {
+                target.SettingsWindowX = Bounds.X;
+                target.SettingsWindowY = Bounds.Y;
+                target.SettingsWindowWidth = FixedWindowWidth();
+                target.SettingsWindowHeight = Bounds.Height;
+                return;
+            }
+
+            target.SettingsWindowX = _config.SettingsWindowX;
+            target.SettingsWindowY = _config.SettingsWindowY;
+            target.SettingsWindowWidth = _config.SettingsWindowWidth;
+            target.SettingsWindowHeight = _config.SettingsWindowHeight;
+        }
+
+        private static void CopyConfig(OverlayConfig source, OverlayConfig target)
+        {
+            target.Enabled = source.Enabled;
+            target.HotkeyDisplay = source.HotkeyDisplay;
+            target.HotkeyModifiers = source.HotkeyModifiers;
+            target.HotkeyVk = source.HotkeyVk;
+            target.DesktopHotkeyDisplay = source.DesktopHotkeyDisplay;
+            target.DesktopHotkeyModifiers = source.DesktopHotkeyModifiers;
+            target.DesktopHotkeyVk = source.DesktopHotkeyVk;
+            target.RtssHotkeyDisplay = source.RtssHotkeyDisplay;
+            target.RtssHotkeyModifiers = source.RtssHotkeyModifiers;
+            target.RtssHotkeyVk = source.RtssHotkeyVk;
+            target.SettingsHotkeyDisplay = source.SettingsHotkeyDisplay;
+            target.SettingsHotkeyModifiers = source.SettingsHotkeyModifiers;
+            target.SettingsHotkeyVk = source.SettingsHotkeyVk;
+            target.DesktopOverlayEnabled = source.DesktopOverlayEnabled;
+            target.RtssOverlayEnabled = source.RtssOverlayEnabled;
+            target.Position = source.Position;
+            target.OffsetX = source.OffsetX;
+            target.OffsetY = source.OffsetY;
+            target.Opacity = source.Opacity;
+            target.FontSize = source.FontSize;
+            target.FontFamily = source.FontFamily;
+            target.BackgroundMode = source.BackgroundMode;
+            target.ShowTextShadow = source.ShowTextShadow;
+            target.ShowBorder = source.ShowBorder;
+            target.ShowTextOutline = source.ShowTextOutline;
+            target.TextOutlineThickness = source.TextOutlineThickness;
+            target.RamDisplayMode = source.RamDisplayMode;
+            target.VramDisplayMode = source.VramDisplayMode;
+            target.SettingsWindowX = source.SettingsWindowX;
+            target.SettingsWindowY = source.SettingsWindowY;
+            target.SettingsWindowWidth = source.SettingsWindowWidth;
+            target.SettingsWindowHeight = source.SettingsWindowHeight;
+            target.CpuFanSensorKey = source.CpuFanSensorKey;
+            target.GpuFanSensorKey = source.GpuFanSensorKey;
+            target.CaseFanSensorKey = source.CaseFanSensorKey;
+            target.Metrics = source.Metrics
+                .Select(metric => new OverlayMetric(metric.Key, metric.Label)
+                {
+                    Enabled = metric.Enabled,
+                    DesktopEnabled = metric.DesktopEnabled,
+                    RtssEnabled = metric.RtssEnabled
+                })
+                .ToList();
+            target.NormalizeMetrics();
+        }
+
+        private static void SelectComboValue(ComboBox comboBox, string value)
+        {
+            comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item =>
+                string.Equals(item?.ToString(), value, StringComparison.OrdinalIgnoreCase));
+
+            if (comboBox.SelectedIndex < 0 && comboBox.Items.Count > 0)
+            {
+                comboBox.SelectedIndex = 0;
+            }
         }
 
         private void UpdateAppearanceState()
