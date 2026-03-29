@@ -71,7 +71,8 @@ namespace PCStatsTray
         private CheckBox _outlineCheck = null!;
         private TrackBar _outlineThicknessSlider = null!;
         private Label _outlineThicknessValue = null!;
-        private CheckBox[] _metricChecks = Array.Empty<CheckBox>();
+        private CheckBox[] _desktopMetricChecks = Array.Empty<CheckBox>();
+        private CheckBox[] _rtssMetricChecks = Array.Empty<CheckBox>();
         private ModernScrollContainer? _scrollContainer;
         private readonly System.Windows.Forms.Timer _statusTimer;
 
@@ -358,7 +359,7 @@ namespace PCStatsTray
 
             int metricRowHeight = Ui(30);
             int metricGroupHeaderHeight = Ui(22);
-            int metricsHeight = Ui(40) + Ui(10);
+            int metricsHeight = Ui(58) + Ui(10);
             string? previousMetricGroup = null;
             foreach (var metric in _config.Metrics)
             {
@@ -372,9 +373,15 @@ namespace PCStatsTray
                 metricsHeight += metricRowHeight;
             }
             var metricsCard = MakeCard(content, "Metrics", ref y, metricsHeight, cardWidth, marginX);
-            _metricChecks = new CheckBox[_config.Metrics.Count];
+            _desktopMetricChecks = new CheckBox[_config.Metrics.Count];
+            _rtssMetricChecks = new CheckBox[_config.Metrics.Count];
+            int desktopColumnX = metricsCard.Width - Ui(96);
+            int rtssColumnX = metricsCard.Width - Ui(48);
 
-            int metricY = Ui(40);
+            metricsCard.Controls.Add(MakeMetricColumnLabel("Desktop", desktopColumnX - Ui(10), Ui(42), Ui(58)));
+            metricsCard.Controls.Add(MakeMetricColumnLabel("RTSS", rtssColumnX - Ui(6), Ui(42), Ui(42)));
+
+            int metricY = Ui(64);
             previousMetricGroup = null;
             for (int i = 0; i < _config.Metrics.Count; i++)
             {
@@ -387,11 +394,21 @@ namespace PCStatsTray
                     previousMetricGroup = group;
                 }
 
-                var check = MakeCheckBox(metric.Label, Ui(16), metricY, metric.Enabled);
-                check.Width = metricsCard.Width - Ui(32);
-                check.CheckedChanged += (_, _) => ApplyLive();
-                _metricChecks[i] = check;
-                metricsCard.Controls.Add(check);
+                var label = MakeLabel(metric.Label, Ui(16), metricY + Ui(3));
+                label.AutoSize = false;
+                label.Size = new Size(metricsCard.Width - Ui(130), Ui(22));
+                metricsCard.Controls.Add(label);
+
+                var desktopCheck = MakeMetricToggleCheckBox(desktopColumnX, metricY, metric.IsEnabledFor(OverlayDisplayTarget.Desktop));
+                desktopCheck.CheckedChanged += (_, _) => ApplyLive();
+                _desktopMetricChecks[i] = desktopCheck;
+                metricsCard.Controls.Add(desktopCheck);
+
+                var rtssCheck = MakeMetricToggleCheckBox(rtssColumnX, metricY, metric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                rtssCheck.CheckedChanged += (_, _) => ApplyLive();
+                _rtssMetricChecks[i] = rtssCheck;
+                metricsCard.Controls.Add(rtssCheck);
+
                 metricY += metricRowHeight;
             }
 
@@ -511,7 +528,8 @@ namespace PCStatsTray
                 CpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_cpuFanSensorBox.SelectedItem),
                 GpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_gpuFanSensorBox.SelectedItem),
                 CaseFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_caseFanSensorBox.SelectedItem),
-                MetricEnabledStates = _metricChecks.Select(check => check.Checked).ToArray()
+                DesktopMetricEnabledStates = _desktopMetricChecks.Select(check => check.Checked).ToArray(),
+                RtssMetricEnabledStates = _rtssMetricChecks.Select(check => check.Checked).ToArray()
             };
 
             OverlaySettingsConfigMapper.Apply(_config, state);
@@ -604,6 +622,20 @@ namespace PCStatsTray
                 Size = new Size(width, Ui(28)),
                 ForeColor = Color.FromArgb(110, 116, 130),
                 Font = new Font("Segoe UI", 8.25f),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private Label MakeMetricColumnLabel(string text, int x, int y, int width)
+        {
+            return new Label
+            {
+                Text = text,
+                Location = new Point(x, y),
+                Size = new Size(width, Ui(18)),
+                ForeColor = Color.FromArgb(110, 116, 130),
+                Font = new Font("Segoe UI", 8.25f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
             };
         }
@@ -704,6 +736,19 @@ namespace PCStatsTray
                 AutoSize = true,
                 ForeColor = FgSecondary,
                 Font = new Font("Segoe UI", 9.5f),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+        }
+
+        private CheckBox MakeMetricToggleCheckBox(int x, int y, bool isChecked)
+        {
+            return new CheckBox
+            {
+                Checked = isChecked,
+                Location = new Point(x, y),
+                Size = new Size(Ui(18), Ui(22)),
+                ForeColor = FgSecondary,
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };

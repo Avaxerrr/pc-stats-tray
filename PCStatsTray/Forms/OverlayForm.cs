@@ -145,9 +145,9 @@ namespace PCStatsTray
             }
         }
 
-        public string BuildOsdText()
+        public string BuildOsdText(OverlayDisplayTarget target = OverlayDisplayTarget.Desktop)
         {
-            return OverlayTextFormatter.BuildOsdText(_config, _currentValues);
+            return OverlayTextFormatter.BuildOsdText(_config, _currentValues, target);
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -185,7 +185,7 @@ namespace PCStatsTray
 
         private List<OverlayMetricDisplay> GetVisibleMetrics()
         {
-            return OverlayTextFormatter.GetVisibleMetrics(_config, _currentValues);
+            return OverlayTextFormatter.GetVisibleMetrics(_config, _currentValues, OverlayDisplayTarget.Desktop);
         }
 
         private void RecalcSize()

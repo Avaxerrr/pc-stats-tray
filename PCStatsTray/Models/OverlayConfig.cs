@@ -11,6 +11,12 @@ namespace PCStatsTray
         BottomRight
     }
 
+    public enum OverlayDisplayTarget
+    {
+        Desktop,
+        Rtss
+    }
+
     /// <summary>
     /// Defines which metric to display on the OSD overlay.
     /// </summary>
@@ -19,6 +25,8 @@ namespace PCStatsTray
         public string Key { get; set; } = "";
         public string Label { get; set; } = "";
         public bool Enabled { get; set; } = true;
+        public bool? DesktopEnabled { get; set; }
+        public bool? RtssEnabled { get; set; }
 
         public OverlayMetric() { }
         public OverlayMetric(string key, string label, bool enabled = true)
@@ -26,6 +34,25 @@ namespace PCStatsTray
             Key = key;
             Label = label;
             Enabled = enabled;
+            DesktopEnabled = enabled;
+            RtssEnabled = enabled;
+        }
+
+        public bool IsEnabledFor(OverlayDisplayTarget target)
+        {
+            return target switch
+            {
+                OverlayDisplayTarget.Desktop => DesktopEnabled ?? Enabled,
+                OverlayDisplayTarget.Rtss => RtssEnabled ?? Enabled,
+                _ => Enabled
+            };
+        }
+
+        public void SetEnabledStates(bool desktopEnabled, bool rtssEnabled)
+        {
+            Enabled = desktopEnabled || rtssEnabled;
+            DesktopEnabled = desktopEnabled;
+            RtssEnabled = rtssEnabled;
         }
     }
 
@@ -122,7 +149,11 @@ namespace PCStatsTray
             {
                 if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
                 {
-                    normalized.Add(new OverlayMetric(defaultMetric.Key, defaultMetric.Label, currentMetric.Enabled));
+                    var normalizedMetric = new OverlayMetric(defaultMetric.Key, defaultMetric.Label);
+                    normalizedMetric.SetEnabledStates(
+                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Desktop),
+                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                    normalized.Add(normalizedMetric);
                     continue;
                 }
 

@@ -7,12 +7,12 @@ namespace PCStatsTray
 
     internal static class OverlayTextFormatter
     {
-        public static List<OverlayMetricDisplay> GetVisibleMetrics(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues)
+        public static List<OverlayMetricDisplay> GetVisibleMetrics(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, OverlayDisplayTarget target)
         {
             var result = new List<OverlayMetricDisplay>();
             foreach (var metric in config.Metrics)
             {
-                if (!metric.Enabled)
+                if (!metric.IsEnabledFor(target))
                 {
                     continue;
                 }
@@ -24,9 +24,9 @@ namespace PCStatsTray
             return result;
         }
 
-        public static string BuildOsdText(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues)
+        public static string BuildOsdText(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, OverlayDisplayTarget target)
         {
-            var metrics = GetVisibleMetrics(config, currentValues);
+            var metrics = GetVisibleMetrics(config, currentValues, target);
             if (metrics.Count == 0)
             {
                 return string.Empty;

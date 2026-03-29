@@ -622,7 +622,7 @@ namespace PCStatsTray
                 return;
             }
 
-            string text = overlayForm.BuildOsdText();
+            string text = overlayForm.BuildOsdText(OverlayDisplayTarget.Rtss);
             if (string.IsNullOrWhiteSpace(text))
             {
                 rtssOverlayClient.Release();

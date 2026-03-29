@@ -37,7 +37,8 @@ namespace PCStatsTray.Tests
                 CpuFanSensorKey = "cpu-fan",
                 GpuFanSensorKey = "gpu-fan",
                 CaseFanSensorKey = "case-fan",
-                MetricEnabledStates = new[] { true, false, true }
+                DesktopMetricEnabledStates = new[] { true, false, true },
+                RtssMetricEnabledStates = new[] { false, true, true }
             };
 
             OverlaySettingsConfigMapper.Apply(config, state);
@@ -56,7 +57,10 @@ namespace PCStatsTray.Tests
             Assert.AreEqual(OverlayConfig.RamDisplayPercentage, config.RamDisplayMode);
             Assert.AreEqual(OverlayConfig.VramDisplayPercentage, config.VramDisplayMode);
             Assert.AreEqual("cpu-fan", config.CpuFanSensorKey);
-            Assert.IsFalse(config.Metrics[1].Enabled);
+            Assert.IsTrue(config.Metrics[0].IsEnabledFor(OverlayDisplayTarget.Desktop));
+            Assert.IsFalse(config.Metrics[0].IsEnabledFor(OverlayDisplayTarget.Rtss));
+            Assert.IsFalse(config.Metrics[1].IsEnabledFor(OverlayDisplayTarget.Desktop));
+            Assert.IsTrue(config.Metrics[1].IsEnabledFor(OverlayDisplayTarget.Rtss));
         }
     }
 }

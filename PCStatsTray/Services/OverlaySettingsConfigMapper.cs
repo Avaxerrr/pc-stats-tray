@@ -28,7 +28,8 @@ namespace PCStatsTray
         public string CpuFanSensorKey { get; init; } = string.Empty;
         public string GpuFanSensorKey { get; init; } = string.Empty;
         public string CaseFanSensorKey { get; init; } = string.Empty;
-        public bool[] MetricEnabledStates { get; init; } = Array.Empty<bool>();
+        public bool[] DesktopMetricEnabledStates { get; init; } = Array.Empty<bool>();
+        public bool[] RtssMetricEnabledStates { get; init; } = Array.Empty<bool>();
     }
 
     internal static class OverlaySettingsConfigMapper
@@ -94,9 +95,15 @@ namespace PCStatsTray
             config.GpuFanSensorKey = state.GpuFanSensorKey;
             config.CaseFanSensorKey = state.CaseFanSensorKey;
 
-            for (int i = 0; i < state.MetricEnabledStates.Length && i < config.Metrics.Count; i++)
+            for (int i = 0; i < config.Metrics.Count; i++)
             {
-                config.Metrics[i].Enabled = state.MetricEnabledStates[i];
+                bool desktopEnabled = i < state.DesktopMetricEnabledStates.Length
+                    ? state.DesktopMetricEnabledStates[i]
+                    : config.Metrics[i].IsEnabledFor(OverlayDisplayTarget.Desktop);
+                bool rtssEnabled = i < state.RtssMetricEnabledStates.Length
+                    ? state.RtssMetricEnabledStates[i]
+                    : config.Metrics[i].IsEnabledFor(OverlayDisplayTarget.Rtss);
+                config.Metrics[i].SetEnabledStates(desktopEnabled, rtssEnabled);
             }
         }
     }
