@@ -56,6 +56,8 @@ namespace HwMonTray
         public string BackgroundMode { get; set; } = BackgroundSolid;
         public bool ShowTextShadow { get; set; } = true;
         public bool ShowBorder { get; set; } = true;
+        public bool ShowTextOutline { get; set; } = true;
+        public int TextOutlineThickness { get; set; } = 2;
         public string RamDisplayMode { get; set; } = RamDisplayUsedAndTotal;
         public int SettingsWindowX { get; set; } = -1;
         public int SettingsWindowY { get; set; } = -1;

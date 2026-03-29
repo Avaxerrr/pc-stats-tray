@@ -44,6 +44,9 @@ namespace HwMonTray
         private ComboBox _ramDisplayModeBox = null!;
         private CheckBox _shadowCheck = null!;
         private CheckBox _borderCheck = null!;
+        private CheckBox _outlineCheck = null!;
+        private TrackBar _outlineThicknessSlider = null!;
+        private Label _outlineThicknessValue = null!;
         private CheckBox[] _metricChecks = Array.Empty<CheckBox>();
         private ModernScrollContainer? _scrollContainer;
 
@@ -64,9 +67,9 @@ namespace HwMonTray
             };
 
             Text = "OSD Settings";
-            ClientSize = new Size(420, 840);
+            ClientSize = new Size(FixedWindowWidth(), 840);
             FormBorderStyle = FormBorderStyle.Sizable;
-            MaximizeBox = true;
+            MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgBase;
@@ -75,7 +78,8 @@ namespace HwMonTray
             TopMost = true;
             DoubleBuffered = true;
             AutoScaleMode = AutoScaleMode.Dpi;
-            MinimumSize = new Size(380, 640);
+            MinimumSize = new Size(FixedWindowWidth(), 640);
+            MaximumSize = new Size(FixedWindowWidth(), 2000);
 
             BuildUI();
             UpdateAppearanceState();
@@ -149,7 +153,7 @@ namespace HwMonTray
                 ApplyLive();
             };
 
-            var appearanceCard = MakeCard(content, "Appearance", ref y, Ui(282), cardWidth, marginX);
+            var appearanceCard = MakeCard(content, "Appearance", ref y, Ui(356), cardWidth, marginX);
             appearanceCard.Controls.Add(MakeLabel("Background", Ui(16), Ui(42)));
             _backgroundModeBox = MakeComboBox(new Point(Ui(132), Ui(38)), new Size(appearanceCard.Width - Ui(148), Ui(28)));
             _backgroundModeBox.Items.AddRange(new object[] { "Solid background", "No background" });
@@ -192,9 +196,33 @@ namespace HwMonTray
             _shadowCheck.CheckedChanged += (_, _) => ApplyLive();
             appearanceCard.Controls.Add(_shadowCheck);
 
-            _borderCheck = MakeCheckBox("Show border outline", Ui(190), Ui(232), _config.ShowBorder);
+            _borderCheck = MakeCheckBox("Show panel border", Ui(190), Ui(232), _config.ShowBorder);
             _borderCheck.CheckedChanged += (_, _) => ApplyLive();
             appearanceCard.Controls.Add(_borderCheck);
+
+            _outlineCheck = MakeCheckBox("Enable text outline", Ui(16), Ui(264), _config.ShowTextOutline);
+            _outlineCheck.CheckedChanged += (_, _) =>
+            {
+                UpdateAppearanceState();
+                ApplyLive();
+            };
+            appearanceCard.Controls.Add(_outlineCheck);
+
+            AddSliderRow(
+                appearanceCard,
+                "Outline thickness",
+                Ui(292),
+                1,
+                6,
+                Math.Clamp(_config.TextOutlineThickness, 1, 6),
+                value => $"{value}px",
+                out _outlineThicknessSlider,
+                out _outlineThicknessValue);
+            _outlineThicknessSlider.ValueChanged += (_, _) =>
+            {
+                _outlineThicknessValue.Text = $"{_outlineThicknessSlider.Value}px";
+                ApplyLive();
+            };
 
             var ramCard = MakeCard(content, "RAM Display", ref y, Ui(96), cardWidth, marginX);
             ramCard.Controls.Add(MakeLabel("Show RAM as", Ui(16), Ui(42)));
@@ -376,6 +404,8 @@ namespace HwMonTray
                 : OverlayConfig.BackgroundSolid;
             _config.ShowTextShadow = _shadowCheck.Checked;
             _config.ShowBorder = _borderCheck.Checked;
+            _config.ShowTextOutline = _outlineCheck.Checked;
+            _config.TextOutlineThickness = _outlineThicknessSlider.Value;
             _config.RamDisplayMode = _ramDisplayModeBox.SelectedIndex == 1
                 ? OverlayConfig.RamDisplayPercentage
                 : OverlayConfig.RamDisplayUsedAndTotal;
@@ -391,6 +421,10 @@ namespace HwMonTray
             bool hasBackground = _backgroundModeBox.SelectedIndex != 1;
             _borderCheck.Enabled = hasBackground;
             _borderCheck.ForeColor = hasBackground ? FgSecondary : Color.FromArgb(95, 100, 110);
+
+            bool outlineEnabled = _outlineCheck.Checked;
+            _outlineThicknessSlider.Enabled = outlineEnabled;
+            _outlineThicknessValue.ForeColor = outlineEnabled ? FgPrimary : Color.FromArgb(95, 100, 110);
         }
 
         private Panel MakeCard(Control parent, string title, ref int y, int height, int width, int marginX)
@@ -565,8 +599,10 @@ namespace HwMonTray
 
         private void RestoreWindowBounds()
         {
+            int fixedWidth = FixedWindowWidth();
             if (!_config.HasSavedSettingsWindowBounds())
             {
+                Width = fixedWidth;
                 return;
             }
 
@@ -574,7 +610,7 @@ namespace HwMonTray
             Bounds = new Rectangle(
                 _config.SettingsWindowX,
                 _config.SettingsWindowY,
-                _config.SettingsWindowWidth,
+                fixedWidth,
                 _config.SettingsWindowHeight);
 
             bool isVisibleOnAnyScreen = Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(Bounds));
@@ -593,7 +629,7 @@ namespace HwMonTray
 
             _config.SettingsWindowX = Bounds.X;
             _config.SettingsWindowY = Bounds.Y;
-            _config.SettingsWindowWidth = Bounds.Width;
+            _config.SettingsWindowWidth = FixedWindowWidth();
             _config.SettingsWindowHeight = Bounds.Height;
             _onSave(_config);
         }
@@ -608,6 +644,11 @@ namespace HwMonTray
         {
             float dpi = DeviceDpi > 0 ? DeviceDpi : 96f;
             return Math.Max(1, (int)Math.Round(logicalPixels * (dpi / 96f)));
+        }
+
+        private int FixedWindowWidth()
+        {
+            return Ui(420);
         }
 
         private static Region CreateRoundedRegion(int width, int height, int radius)

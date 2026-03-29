@@ -490,28 +490,97 @@ namespace HwMonTray
 
         private void DrawText(Graphics g, string text, Font font, Color color, RectangleF rect, StringFormat format, bool isValue)
         {
-            if (_config.ShowTextShadow)
+            bool hasShadow = _config.ShowTextShadow;
+            bool hasOutline = _config.ShowTextOutline;
+
+            if (!hasShadow && !hasOutline)
             {
-                int shadowOffset = ScaleInt(_config.HasBackground() ? 1.5f : 2.5f);
-                int shadowAlpha = _config.HasBackground()
-                    ? (isValue ? 110 : 90)
-                    : (isValue ? 210 : 180);
+                using var plainTextBrush = new SolidBrush(color);
+                g.DrawString(text, font, plainTextBrush, rect, format);
+                return;
+            }
 
-                using var shadowBrush = new SolidBrush(ApplyOpacity(Color.FromArgb(shadowAlpha, 0, 0, 0)));
-                var shadowRect = rect;
-                shadowRect.Offset(shadowOffset, shadowOffset);
-                g.DrawString(text, font, shadowBrush, shadowRect, format);
+            using var textPath = CreateTextPath(g, text, font, rect, format);
 
-                if (!_config.HasBackground())
+            if (hasShadow)
+            {
+                DrawTextShadow(g, textPath, isValue);
+            }
+
+            if (hasOutline)
+            {
+                float outlineWidth = Math.Max(ScaleFloat(1f), ScaleFloat(Math.Clamp(_config.TextOutlineThickness, 1, 6)));
+                int outlineAlpha = _config.HasBackground()
+                    ? (isValue ? 150 : 138)
+                    : (isValue ? 220 : 205);
+
+                using var outlinePen = new Pen(ApplyOpacity(Color.FromArgb(outlineAlpha, 0, 0, 0)), outlineWidth)
                 {
-                    var secondaryShadowRect = rect;
-                    secondaryShadowRect.Offset(shadowOffset + 1, shadowOffset);
-                    g.DrawString(text, font, shadowBrush, secondaryShadowRect, format);
-                }
+                    LineJoin = LineJoin.Round
+                };
+                g.DrawPath(outlinePen, textPath);
             }
 
             using var textBrush = new SolidBrush(color);
-            g.DrawString(text, font, textBrush, rect, format);
+            g.FillPath(textBrush, textPath);
+        }
+
+        private void DrawTextShadow(Graphics g, GraphicsPath textPath, bool isValue)
+        {
+            float primaryOffset = _config.HasBackground() ? ScaleFloat(1.0f) : ScaleFloat(1.35f);
+            float secondaryOffset = _config.HasBackground() ? ScaleFloat(1.8f) : ScaleFloat(2.4f);
+
+            using var primaryShadow = (GraphicsPath)textPath.Clone();
+            using (var translate = new Matrix())
+            {
+                translate.Translate(primaryOffset, primaryOffset);
+                primaryShadow.Transform(translate);
+            }
+
+            int primaryFillAlpha = _config.HasBackground()
+                ? (isValue ? 48 : 40)
+                : (isValue ? 78 : 68);
+            int primaryStrokeAlpha = _config.HasBackground()
+                ? (isValue ? 28 : 22)
+                : (isValue ? 44 : 38);
+
+            using (var shadowBrush = new SolidBrush(ApplyOpacity(Color.FromArgb(primaryFillAlpha, 0, 0, 0))))
+            using (var shadowPen = new Pen(ApplyOpacity(Color.FromArgb(primaryStrokeAlpha, 0, 0, 0)), _config.HasBackground() ? ScaleFloat(1.4f) : ScaleFloat(2.1f))
+            {
+                LineJoin = LineJoin.Round
+            })
+            {
+                g.FillPath(shadowBrush, primaryShadow);
+                g.DrawPath(shadowPen, primaryShadow);
+            }
+
+            if (_config.HasBackground())
+            {
+                return;
+            }
+
+            using var secondaryShadow = (GraphicsPath)textPath.Clone();
+            using (var translate = new Matrix())
+            {
+                translate.Translate(secondaryOffset, secondaryOffset);
+                secondaryShadow.Transform(translate);
+            }
+
+            using var secondaryBrush = new SolidBrush(ApplyOpacity(Color.FromArgb(isValue ? 34 : 28, 0, 0, 0)));
+            using var secondaryPen = new Pen(ApplyOpacity(Color.FromArgb(isValue ? 18 : 14, 0, 0, 0)), ScaleFloat(2.8f))
+            {
+                LineJoin = LineJoin.Round
+            };
+            g.FillPath(secondaryBrush, secondaryShadow);
+            g.DrawPath(secondaryPen, secondaryShadow);
+        }
+
+        private GraphicsPath CreateTextPath(Graphics g, string text, Font font, RectangleF rect, StringFormat format)
+        {
+            var path = new GraphicsPath();
+            float emSize = g.DpiY * font.SizeInPoints / 72f;
+            path.AddString(text, font.FontFamily, (int)font.Style, emSize, Rectangle.Round(rect), format);
+            return path;
         }
 
         private Color GetValueColor(string key, string value)
