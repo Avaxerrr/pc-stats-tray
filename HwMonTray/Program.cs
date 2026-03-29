@@ -21,6 +21,9 @@ namespace HwMonTray
 
     static class Program
     {
+        private const int SM_CXSMICON = 49;
+        private const int SM_CYSMICON = 50;
+
         private static NotifyIcon cpuTrayIcon = null!;
         private static NotifyIcon gpuTrayIcon = null!;
         private static Computer computer = null!;
@@ -303,8 +306,8 @@ namespace HwMonTray
             if (gpuTrayText.Length >= 64) gpuTrayText = gpuTrayText.Substring(0, 63);
             gpuTrayIcon.Text = gpuTrayText;
 
-            SetTrayIcon(cpuTrayIcon, maxCpuTemp, "CPU");
-            SetTrayIcon(gpuTrayIcon, maxGpuTemp, "GPU");
+            SetSmoothedTrayIcon(cpuTrayIcon, maxCpuTemp);
+            SetSmoothedTrayIcon(gpuTrayIcon, maxGpuTemp);
         }
 
         private static Color TextColor(float temp)
@@ -376,6 +379,110 @@ namespace HwMonTray
             bmp.Dispose();
         }
 
+        private static void SetSmoothedTrayIcon(NotifyIcon icon, float temp)
+        {
+            int iconSize = GetTrayIconSize();
+            using Bitmap bmp = RenderTrayIconBitmap(temp, iconSize);
+
+            IntPtr hIcon = bmp.GetHicon();
+            Icon newIcon = Icon.FromHandle(hIcon);
+            var oldIcon = icon.Icon;
+            icon.Icon = newIcon;
+
+            if (oldIcon != null)
+            {
+                DestroyIcon(oldIcon.Handle);
+                oldIcon.Dispose();
+            }
+        }
+
+        private static Bitmap RenderTrayIconBitmap(float temp, int iconSize)
+        {
+            const int supersampleScale = 4;
+            int canvasSize = iconSize * supersampleScale;
+
+            using var largeBmp = new Bitmap(canvasSize, canvasSize, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(largeBmp))
+            {
+                ConfigureTrayGraphics(g);
+
+                string tempText = temp > 0 ? $"{temp:0}" : "--";
+                using var textPath = CreateMaximizedTrayTextPath(tempText, canvasSize * 0.92f, canvasSize);
+                using var backgroundPath = CreateTrayBackgroundPath(textPath, canvasSize);
+                using var backgroundBrush = new SolidBrush(Color.FromArgb(30, 30, 30));
+                using var textBrush = new SolidBrush(TextColor(temp));
+                g.FillPath(backgroundBrush, backgroundPath);
+                g.FillPath(textBrush, textPath);
+            }
+
+            var finalBmp = new Bitmap(iconSize, iconSize, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(finalBmp))
+            {
+                ConfigureTrayGraphics(g);
+                g.DrawImage(largeBmp, new Rectangle(0, 0, iconSize, iconSize), new Rectangle(0, 0, canvasSize, canvasSize), GraphicsUnit.Pixel);
+            }
+
+            return finalBmp;
+        }
+
+        private static void ConfigureTrayGraphics(Graphics graphics)
+        {
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.Clear(Color.Transparent);
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath CreateMaximizedTrayTextPath(string text, float targetSize, int canvasSize)
+        {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            using var fontFamily = new FontFamily("Segoe UI");
+            using var format = StringFormat.GenericTypographic;
+            path.AddString(text, fontFamily, (int)FontStyle.Bold, canvasSize, Point.Empty, format);
+
+            RectangleF bounds = path.GetBounds();
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return path;
+            }
+
+            float scale = Math.Min(targetSize / bounds.Width, targetSize / bounds.Height);
+            float finalWidth = bounds.Width * scale;
+            float finalHeight = bounds.Height * scale;
+            float offsetX = (canvasSize - finalWidth) / 2f;
+            float offsetY = (canvasSize - finalHeight) / 2f;
+
+            using var transform = new System.Drawing.Drawing2D.Matrix();
+            transform.Translate(-bounds.X, -bounds.Y, System.Drawing.Drawing2D.MatrixOrder.Append);
+            transform.Scale(scale, scale, System.Drawing.Drawing2D.MatrixOrder.Append);
+            transform.Translate(offsetX, offsetY, System.Drawing.Drawing2D.MatrixOrder.Append);
+            path.Transform(transform);
+            return path;
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath CreateTrayBackgroundPath(System.Drawing.Drawing2D.GraphicsPath textPath, int canvasSize)
+        {
+            RectangleF textBounds = textPath.GetBounds();
+            float padX = canvasSize * 0.04f;
+            float padY = canvasSize * 0.07f;
+            float x = Math.Max(0, textBounds.X - padX);
+            float y = Math.Max(0, textBounds.Y - padY);
+            float width = Math.Min(canvasSize - x, textBounds.Width + (padX * 2f));
+            float height = Math.Min(canvasSize - y, textBounds.Height + (padY * 2f));
+            float radius = Math.Max(canvasSize * 0.14f, 6f);
+
+            return RoundedRect(Rectangle.Round(new RectangleF(x, y, width, height)), (int)Math.Round(radius));
+        }
+
+        private static int GetTrayIconSize()
+        {
+            int width = GetSystemMetrics(SM_CXSMICON);
+            int height = GetSystemMetrics(SM_CYSMICON);
+            int size = Math.Max(Math.Max(width, height), 16);
+            return Math.Min(size, 64);
+        }
+
 
         private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle bounds, int radius)
         {
@@ -391,6 +498,9 @@ namespace HwMonTray
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         extern static bool DestroyIcon(IntPtr handle);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
 
         private static void CleanUp()
         {
