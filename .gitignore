@@ -12,6 +12,23 @@ publish/
 
 # Debug files
 *.pdb
+*.binlog
+*.trx
+*.coverage
+*.coveragexml
+
+# Test results
+TestResults/
 
 # Config files created at runtime
 hwmon_config.json
+
+# Local release artifacts
+HwMonTray_v*.exe
+PCStatsTray_v*.exe
+
+# Scratch work
+_scratch/
+
+# Local non-source artifacts
+local-artifacts/

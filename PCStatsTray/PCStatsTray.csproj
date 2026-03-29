@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <AssemblyName>PCStatsTray</AssemblyName>
+    <RootNamespace>PCStatsTray</RootNamespace>
+    <Product>PC Stats Tray</Product>
+    <AssemblyTitle>PC Stats Tray</AssemblyTitle>
+    <Version>0.4.0</Version>
+    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <FileVersion>0.4.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="LibreHardwareMonitorLib">
+      <HintPath>lib\LibreHardwareMonitorLib.dll</HintPath>
+    </Reference>
+    <Reference Include="HidSharp">
+      <HintPath>lib\HidSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="DiskInfoToolkit">
+      <HintPath>lib\DiskInfoToolkit.dll</HintPath>
+    </Reference>
+
+    <Reference Include="RAMSPDToolkit-NDD">
+      <HintPath>lib\RAMSPDToolkit-NDD.dll</HintPath>
+    </Reference>
+    <Reference Include="BlackSharp.Core">
+      <HintPath>lib\BlackSharp.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.IO.Ports">
+      <HintPath>lib\System.IO.Ports.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Add System.Management which LHM uses for querying Windows WMI -->
+    <PackageReference Include="System.Management" Version="10.0.2" />
+  </ItemGroup>
+
+</Project>
