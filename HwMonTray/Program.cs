@@ -1,10 +1,7 @@
 using System;
 using System.Drawing;
-using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -35,7 +32,7 @@ namespace HwMonTray
         // OSD Overlay
         private static OverlayForm? overlayForm;
         private static OverlayConfig overlayConfig = null!;
-        private static HotkeyWindow? hotkeyWindow;
+        private static GlobalHotkeyService? hotkeyService;
         private static RtssOverlayClient? rtssOverlayClient;
         private static ToolStripMenuItem? rtssStatusItem;
 
@@ -49,7 +46,6 @@ namespace HwMonTray
         private static float gpuMaxTemp = float.MinValue;
         private static double gpuSumTemp = 0;
         private static long gpuTempCount = 0;
-        internal static readonly string ConfigPath = AppConfigStore.DefaultPath;
 
         [STAThread]
         static void Main()
@@ -104,10 +100,10 @@ namespace HwMonTray
             overlayForm = new OverlayForm(computer, overlayConfig);
             rtssOverlayClient = new RtssOverlayClient();
 
-            // Register global hotkey
-            hotkeyWindow = new HotkeyWindow();
-            hotkeyWindow.HotkeyPressed += OnHotkeyPressed;
-            RegisterCurrentHotkey();
+            // Register global hotkeys
+            hotkeyService = new GlobalHotkeyService();
+            hotkeyService.HotkeyPressed += OnHotkeyPressed;
+            hotkeyService.ApplyConfig(overlayConfig);
 
             UpdateData();
             ApplyOverlayOutputs();
@@ -162,11 +158,11 @@ namespace HwMonTray
             contextMenu.Items.Add(new ToolStripSeparator());
 
             var startupItem = new ToolStripMenuItem("Run at Startup");
-            startupItem.Checked = IsStartupTaskConfigured();
+            startupItem.Checked = StartupTaskService.IsConfigured();
             startupItem.Click += (s, e) => 
             {
                 ToggleStartup();
-                startupItem.Checked = IsStartupTaskConfigured();
+                startupItem.Checked = StartupTaskService.IsConfigured();
             };
             contextMenu.Items.Add(startupItem);
 
@@ -205,10 +201,7 @@ namespace HwMonTray
         private static void OnOverlayConfigSaved(OverlayConfig config)
         {
             overlayConfig = config;
-
-            // Re-register hotkey with new combo
-            UnregisterCurrentHotkey();
-            RegisterCurrentHotkey();
+            hotkeyService?.ApplyConfig(config);
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -223,141 +216,16 @@ namespace HwMonTray
             PopulateInitialMenu();
         }
 
-        private static void RegisterCurrentHotkey()
-        {
-            if (hotkeyWindow != null && overlayConfig.HotkeyVk != 0)
-            {
-                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 1,
-                    (uint)overlayConfig.HotkeyModifiers, (uint)overlayConfig.HotkeyVk);
-            }
-
-            if (hotkeyWindow != null && overlayConfig.SettingsHotkeyVk != 0)
-            {
-                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 2,
-                    (uint)overlayConfig.SettingsHotkeyModifiers, (uint)overlayConfig.SettingsHotkeyVk);
-            }
-        }
-
-        private static void UnregisterCurrentHotkey()
-        {
-            if (hotkeyWindow != null)
-            {
-                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 1);
-                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 2);
-            }
-        }
 
         // ── Overlay Config Persistence ───────────────────────────────
 
-        private static OverlayConfig LoadOverlayConfig()
-        {
-            try
-            {
-                if (File.Exists(ConfigPath))
-                {
-                    string json = File.ReadAllText(ConfigPath);
-                    var cfg = JsonSerializer.Deserialize<AppConfigFull>(json);
-                    if (cfg?.Overlay != null)
-                    {
-                        cfg.Overlay.NormalizeMetrics();
-                        return cfg.Overlay;
-                    }
-                }
-            }
-            catch { }
-            var overlay = new OverlayConfig();
-            overlay.NormalizeMetrics();
-            return overlay;
-        }
-
-        internal static void SaveOverlayConfig(OverlayConfig overlay)
-        {
-            try
-            {
-                overlay.NormalizeMetrics();
-                AppConfigFull cfg;
-                if (File.Exists(ConfigPath))
-                {
-                    string existing = File.ReadAllText(ConfigPath);
-                    cfg = JsonSerializer.Deserialize<AppConfigFull>(existing) ?? new AppConfigFull();
-                }
-                else
-                {
-                    cfg = new AppConfigFull();
-                }
-
-                cfg.Overlay = overlay;
-                string json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(ConfigPath, json);
-            }
-            catch { }
-        }
-
-        /// <summary>
-        /// Full config model that includes both sensor filter settings and overlay settings.
-        /// </summary>
-        internal class AppConfigFull
-        {
-            public List<string> HiddenSensors { get; set; } = new();
-            public OverlayConfig? Overlay { get; set; }
-        }
-
         // ── Hotkey Window ────────────────────────────────────────────
-
-        private const string TaskName = "HwMonTray_Startup";
-
-        private static bool IsStartupTaskConfigured()
-        {
-            try
-            {
-                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
-                dynamic ts = Activator.CreateInstance(type)!;
-                ts.Connect();
-                dynamic folder = ts.GetFolder("\\");
-                var task = folder.GetTask(TaskName);
-                return task != null;
-            }
-            catch { return false; }
-        }
 
         private static void ToggleStartup()
         {
             try
             {
-                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
-                dynamic ts = Activator.CreateInstance(type)!;
-                ts.Connect();
-                dynamic folder = ts.GetFolder("\\");
-
-                if (IsStartupTaskConfigured())
-                {
-                    folder.DeleteTask(TaskName, 0);
-                }
-                else
-                {
-                    dynamic taskDef = ts.NewTask(0);
-                    taskDef.RegistrationInfo.Description = "Hardware Monitor Tray Icon Startup";
-                    
-                    // Trigger: Logon (type 9)
-                    dynamic trigger = taskDef.Triggers.Create(9);
-                    
-                    // Action: Run exe (type 0)
-                    dynamic action = taskDef.Actions.Create(0);
-                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? Application.ExecutablePath;
-                    action.Path = exePath;
-                    action.WorkingDirectory = Path.GetDirectoryName(exePath);
-
-                    // Run with highest privileges (bypasses UAC on boot)
-                    taskDef.Principal.RunLevel = 1;
-
-                    // Critical for laptops: allow running on battery
-                    taskDef.Settings.DisallowStartIfOnBatteries = false;
-                    taskDef.Settings.StopIfGoingOnBatteries = false;
-                    taskDef.Settings.ExecutionTimeLimit = "PT0S"; // No time limit
-
-                    // Register: CreateOrUpdate (6), InteractiveToken (3)
-                    folder.RegisterTaskDefinition(TaskName, taskDef, 6, null, null, 3, null);
-                }
+                StartupTaskService.Toggle();
             }
             catch (Exception ex)
             {
@@ -526,8 +394,7 @@ namespace HwMonTray
 
         private static void CleanUp()
         {
-            UnregisterCurrentHotkey();
-            hotkeyWindow?.DestroyHandle();
+            hotkeyService?.Dispose();
 
             if (overlayForm != null && !overlayForm.IsDisposed)
             {
@@ -676,36 +543,6 @@ namespace HwMonTray
             }
 
             rtssStatusItem.Text = "RTSS: ready";
-        }
-    }
-
-    /// <summary>
-    /// Invisible NativeWindow that listens for WM_HOTKEY messages.
-    /// </summary>
-    internal class HotkeyWindow : NativeWindow
-    {
-        private const int WM_HOTKEY = 0x0312;
-
-        public event Action<int>? HotkeyPressed;
-
-        [DllImport("user32.dll")]
-        public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        [DllImport("user32.dll")]
-        public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        public HotkeyWindow()
-        {
-            CreateHandle(new CreateParams());
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == WM_HOTKEY)
-            {
-                HotkeyPressed?.Invoke(m.WParam.ToInt32());
-            }
-            base.WndProc(ref m);
         }
     }
 }
