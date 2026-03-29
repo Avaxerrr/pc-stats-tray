@@ -37,6 +37,7 @@ Run the published executable from:
 ```powershell
 & ".\bin\Release\net10.0-windows\win-x64\publish\HwMonTray.exe"
 ```
+Only create a root-level versioned one-file executable such as `HwMonTray_v0.3.1.exe` when the user explicitly says it is the final build/release. Otherwise, publish only to the standard .NET publish folder and do not refresh or create versioned root executables.
 
 ## 3. UI and Rendering Caveats
 

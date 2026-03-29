@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Linq;
 using System.Windows.Forms;
+using LibreHardwareMonitor.Hardware;
 
 namespace HwMonTray
 {
@@ -24,15 +25,28 @@ namespace HwMonTray
 
         private readonly OverlayConfig _config;
         private readonly Action<OverlayConfig> _onSave;
+        private readonly Computer _computer;
+        private readonly List<FanSensorOption> _fanSensorOptions;
 
-        private TextBox _hotkeyBox = null!;
-        private int _capturedMods;
-        private int _capturedVk;
-        private string _capturedDisplay = "";
+        private TextBox _toggleHotkeyBox = null!;
+        private TextBox _settingsHotkeyBox = null!;
+        private int _capturedToggleMods;
+        private int _capturedToggleVk;
+        private string _capturedToggleDisplay = "";
+        private int _capturedSettingsMods;
+        private int _capturedSettingsVk;
+        private string _capturedSettingsDisplay = "";
+        private TextBox? _activeHotkeyBox;
+        private HotkeyCaptureTarget _activeHotkeyTarget;
         private bool _isCapturing;
 
         private bool _alignRight;
         private bool _alignBottom;
+        private CheckBox _enabledCheck = null!;
+        private CheckBox _desktopOverlayCheck = null!;
+        private CheckBox _rtssOverlayCheck = null!;
+        private Button _copyRtssDebugButton = null!;
+        private RichTextBox _outputStatusBox = null!;
         private Button _horizontalLeftButton = null!;
         private Button _horizontalRightButton = null!;
         private Button _verticalTopButton = null!;
@@ -48,6 +62,9 @@ namespace HwMonTray
         private ComboBox _backgroundModeBox = null!;
         private ComboBox _fontFamilyBox = null!;
         private ComboBox _ramDisplayModeBox = null!;
+        private ComboBox _cpuFanSensorBox = null!;
+        private ComboBox _gpuFanSensorBox = null!;
+        private ComboBox _caseFanSensorBox = null!;
         private CheckBox _shadowCheck = null!;
         private CheckBox _borderCheck = null!;
         private CheckBox _outlineCheck = null!;
@@ -55,14 +72,21 @@ namespace HwMonTray
         private Label _outlineThicknessValue = null!;
         private CheckBox[] _metricChecks = Array.Empty<CheckBox>();
         private ModernScrollContainer? _scrollContainer;
+        private readonly System.Windows.Forms.Timer _statusTimer;
 
-        public OverlaySettingsForm(OverlayConfig config, Action<OverlayConfig> onSave)
+        public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave)
         {
+            _computer = computer;
             _config = config;
             _onSave = onSave;
-            _capturedMods = config.HotkeyModifiers;
-            _capturedVk = config.HotkeyVk;
-            _capturedDisplay = config.HotkeyDisplay;
+            _computer.Accept(new UpdateVisitor());
+            _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
+            _capturedToggleMods = config.HotkeyModifiers;
+            _capturedToggleVk = config.HotkeyVk;
+            _capturedToggleDisplay = config.HotkeyDisplay;
+            _capturedSettingsMods = config.SettingsHotkeyModifiers;
+            _capturedSettingsVk = config.SettingsHotkeyVk;
+            _capturedSettingsDisplay = config.SettingsHotkeyDisplay;
             (_alignRight, _alignBottom) = config.Position switch
             {
                 "TopLeft" => (false, false),
@@ -86,9 +110,12 @@ namespace HwMonTray
             AutoScaleMode = AutoScaleMode.Dpi;
             MinimumSize = new Size(FixedWindowWidth(), 640);
             MaximumSize = new Size(FixedWindowWidth(), 2000);
+            _statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _statusTimer.Tick += (_, _) => UpdateOutputState();
 
             BuildUI();
             UpdateAppearanceState();
+            UpdateOutputState();
             RestoreWindowBounds();
 
             ResizeEnd += (_, _) => PersistWindowBounds();
@@ -107,33 +134,56 @@ namespace HwMonTray
             int cardWidth = Ui(350);
             int marginX = Ui(24);
 
-            var hotkeyCard = MakeCard(content, "Hotkey", ref y, Ui(92), cardWidth, marginX);
-            _hotkeyBox = new TextBox
+            var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(150), cardWidth, marginX);
+            hotkeyCard.Controls.Add(MakeLabel("Toggle OSD", Ui(16), Ui(42)));
+            _toggleHotkeyBox = MakeHotkeyBox(_capturedToggleDisplay, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_toggleHotkeyBox, HotkeyCaptureTarget.ToggleOsd, () => string.IsNullOrEmpty(_capturedToggleDisplay) ? _config.HotkeyDisplay : _capturedToggleDisplay);
+            hotkeyCard.Controls.Add(_toggleHotkeyBox);
+
+            hotkeyCard.Controls.Add(MakeLabel("Open settings", Ui(16), Ui(92)));
+            _settingsHotkeyBox = MakeHotkeyBox(_capturedSettingsDisplay, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+            WireHotkeyCapture(_settingsHotkeyBox, HotkeyCaptureTarget.OpenSettings, () => string.IsNullOrEmpty(_capturedSettingsDisplay) ? _config.SettingsHotkeyDisplay : _capturedSettingsDisplay);
+            hotkeyCard.Controls.Add(_settingsHotkeyBox);
+
+            var outputCard = MakeCard(content, "Output", ref y, Ui(296), cardWidth, marginX);
+            _enabledCheck = MakeCheckBox("Enable OSD", Ui(16), Ui(42), _config.Enabled);
+            _enabledCheck.CheckedChanged += (_, _) =>
             {
-                Text = _capturedDisplay,
-                ReadOnly = true,
-                TextAlign = HorizontalAlignment.Center,
-                Location = new Point(Ui(16), Ui(42)),
-                Size = new Size(hotkeyCard.Width - Ui(32), Ui(34)),
-                BackColor = BgInput,
-                ForeColor = Accent,
-                Font = new Font("Consolas", 13f, FontStyle.Bold),
-                BorderStyle = BorderStyle.FixedSingle
+                UpdateOutputState();
+                ApplyLive();
             };
-            _hotkeyBox.GotFocus += (_, _) =>
+            outputCard.Controls.Add(_enabledCheck);
+
+            _desktopOverlayCheck = MakeCheckBox("Desktop OSD", Ui(16), Ui(72), _config.DesktopOverlayEnabled);
+            _desktopOverlayCheck.CheckedChanged += (_, _) =>
             {
-                _isCapturing = true;
-                _hotkeyBox.Text = "Press shortcut...";
-                _hotkeyBox.ForeColor = Color.FromArgb(255, 195, 70);
+                UpdateOutputState();
+                ApplyLive();
             };
-            _hotkeyBox.LostFocus += (_, _) =>
+            outputCard.Controls.Add(_desktopOverlayCheck);
+
+            _rtssOverlayCheck = MakeCheckBox("RTSS OSD (Games)", Ui(16), Ui(102), _config.RtssOverlayEnabled);
+            _rtssOverlayCheck.CheckedChanged += (_, _) =>
             {
-                _isCapturing = false;
-                _hotkeyBox.ForeColor = Accent;
-                _hotkeyBox.Text = string.IsNullOrEmpty(_capturedDisplay) ? _config.HotkeyDisplay : _capturedDisplay;
+                UpdateOutputState();
+                ApplyLive();
             };
-            _hotkeyBox.KeyDown += OnHotkeyKeyDown;
-            hotkeyCard.Controls.Add(_hotkeyBox);
+            outputCard.Controls.Add(_rtssOverlayCheck);
+            outputCard.Controls.Add(MakeCaption("RTSS output requires RivaTuner Statistics Server to be running.", Ui(16), Ui(132), outputCard.Width - Ui(32)));
+            outputCard.Controls.Add(MakeReadOnlyDebugBox(new Point(Ui(16), Ui(156)), new Size(outputCard.Width - Ui(32), Ui(98))));
+            _copyRtssDebugButton = MakeButton("Copy RTSS Debug", Ui(16), Ui(262), Ui(122), Ui(28), Color.FromArgb(50, 52, 60), FgPrimary, FontStyle.Regular);
+            _copyRtssDebugButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
+            _copyRtssDebugButton.Click += (_, _) =>
+            {
+                try
+                {
+                    Clipboard.SetText(RtssOverlayClient.BuildDebugReport());
+                }
+                catch
+                {
+                }
+            };
+            outputCard.Controls.Add(_copyRtssDebugButton);
 
             var posCard = MakeCard(content, "Position", ref y, Ui(240), cardWidth, marginX);
             posCard.Controls.Add(MakeLabel("Horizontal", Ui(16), Ui(42)));
@@ -274,19 +324,58 @@ namespace HwMonTray
             _ramDisplayModeBox.SelectedIndexChanged += (_, _) => ApplyLive();
             ramCard.Controls.Add(_ramDisplayModeBox);
 
+            var fanSensorsCard = MakeCard(content, "Fan Sensors", ref y, Ui(152), cardWidth, marginX);
+            fanSensorsCard.Controls.Add(MakeLabel("CPU Fan", Ui(16), Ui(42)));
+            _cpuFanSensorBox = MakeFanSensorComboBox(new Point(Ui(132), Ui(38)), new Size(fanSensorsCard.Width - Ui(148), Ui(28)));
+            fanSensorsCard.Controls.Add(_cpuFanSensorBox);
+
+            fanSensorsCard.Controls.Add(MakeLabel("GPU Fan", Ui(16), Ui(78)));
+            _gpuFanSensorBox = MakeFanSensorComboBox(new Point(Ui(132), Ui(74)), new Size(fanSensorsCard.Width - Ui(148), Ui(28)));
+            fanSensorsCard.Controls.Add(_gpuFanSensorBox);
+
+            fanSensorsCard.Controls.Add(MakeLabel("Case Fan", Ui(16), Ui(114)));
+            _caseFanSensorBox = MakeFanSensorComboBox(new Point(Ui(132), Ui(110)), new Size(fanSensorsCard.Width - Ui(148), Ui(28)));
+            fanSensorsCard.Controls.Add(_caseFanSensorBox);
+
+            PopulateFanSensorChoices();
+
             int metricRowHeight = Ui(30);
-            int metricsHeight = Ui(40) + (_config.Metrics.Count * metricRowHeight) + Ui(10);
+            int metricGroupHeaderHeight = Ui(22);
+            int metricsHeight = Ui(40) + Ui(10);
+            string? previousMetricGroup = null;
+            foreach (var metric in _config.Metrics)
+            {
+                string group = GetMetricGroupLabel(metric.Key);
+                if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
+                {
+                    metricsHeight += metricGroupHeaderHeight;
+                    previousMetricGroup = group;
+                }
+
+                metricsHeight += metricRowHeight;
+            }
             var metricsCard = MakeCard(content, "Metrics", ref y, metricsHeight, cardWidth, marginX);
             _metricChecks = new CheckBox[_config.Metrics.Count];
 
+            int metricY = Ui(40);
+            previousMetricGroup = null;
             for (int i = 0; i < _config.Metrics.Count; i++)
             {
                 var metric = _config.Metrics[i];
-                var check = MakeCheckBox(metric.Label, Ui(16), Ui(40) + (i * metricRowHeight), metric.Enabled);
+                string group = GetMetricGroupLabel(metric.Key);
+                if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
+                {
+                    metricsCard.Controls.Add(MakeSectionLabel(group, Ui(16), metricY));
+                    metricY += metricGroupHeaderHeight;
+                    previousMetricGroup = group;
+                }
+
+                var check = MakeCheckBox(metric.Label, Ui(16), metricY, metric.Enabled);
                 check.Width = metricsCard.Width - Ui(32);
                 check.CheckedChanged += (_, _) => ApplyLive();
                 _metricChecks[i] = check;
                 metricsCard.Controls.Add(check);
+                metricY += metricRowHeight;
             }
 
             var bottom = new Panel
@@ -331,7 +420,7 @@ namespace HwMonTray
 
         private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
         {
-            if (!_isCapturing)
+            if (!_isCapturing || _activeHotkeyBox == null)
             {
                 return;
             }
@@ -352,17 +441,28 @@ namespace HwMonTray
 
             if (mods == 0)
             {
-                _hotkeyBox.Text = "Need a modifier key";
+                _activeHotkeyBox.Text = "Need a modifier key";
                 return;
             }
 
             display += e.KeyCode;
-            _capturedMods = mods;
-            _capturedVk = (int)e.KeyCode;
-            _capturedDisplay = display;
-            _hotkeyBox.Text = display;
-            _hotkeyBox.ForeColor = AccentGreen;
+            if (_activeHotkeyTarget == HotkeyCaptureTarget.ToggleOsd)
+            {
+                _capturedToggleMods = mods;
+                _capturedToggleVk = (int)e.KeyCode;
+                _capturedToggleDisplay = display;
+            }
+            else
+            {
+                _capturedSettingsMods = mods;
+                _capturedSettingsVk = (int)e.KeyCode;
+                _capturedSettingsDisplay = display;
+            }
+
+            _activeHotkeyBox.Text = display;
+            _activeHotkeyBox.ForeColor = AccentGreen;
             _isCapturing = false;
+            _activeHotkeyBox = null;
         }
 
         private void ApplyLive()
@@ -373,10 +473,16 @@ namespace HwMonTray
 
         private void CommitConfig()
         {
-            _config.HotkeyDisplay = string.IsNullOrWhiteSpace(_capturedDisplay) ? _config.HotkeyDisplay : _capturedDisplay;
-            _config.HotkeyModifiers = _capturedMods == 0 ? _config.HotkeyModifiers : _capturedMods;
-            _config.HotkeyVk = _capturedVk == 0 ? _config.HotkeyVk : _capturedVk;
+            _config.HotkeyDisplay = string.IsNullOrWhiteSpace(_capturedToggleDisplay) ? _config.HotkeyDisplay : _capturedToggleDisplay;
+            _config.HotkeyModifiers = _capturedToggleMods == 0 ? _config.HotkeyModifiers : _capturedToggleMods;
+            _config.HotkeyVk = _capturedToggleVk == 0 ? _config.HotkeyVk : _capturedToggleVk;
+            _config.SettingsHotkeyDisplay = string.IsNullOrWhiteSpace(_capturedSettingsDisplay) ? _config.SettingsHotkeyDisplay : _capturedSettingsDisplay;
+            _config.SettingsHotkeyModifiers = _capturedSettingsMods == 0 ? _config.SettingsHotkeyModifiers : _capturedSettingsMods;
+            _config.SettingsHotkeyVk = _capturedSettingsVk == 0 ? _config.SettingsHotkeyVk : _capturedSettingsVk;
 
+            _config.Enabled = _enabledCheck.Checked;
+            _config.DesktopOverlayEnabled = _desktopOverlayCheck.Checked;
+            _config.RtssOverlayEnabled = _rtssOverlayCheck.Checked;
             _config.Position = (_alignRight, _alignBottom) switch
             {
                 (false, false) => "TopLeft",
@@ -400,6 +506,9 @@ namespace HwMonTray
             _config.RamDisplayMode = _ramDisplayModeBox.SelectedIndex == 1
                 ? OverlayConfig.RamDisplayPercentage
                 : OverlayConfig.RamDisplayUsedAndTotal;
+            _config.CpuFanSensorKey = GetSelectedFanSensorKey(_cpuFanSensorBox);
+            _config.GpuFanSensorKey = GetSelectedFanSensorKey(_gpuFanSensorBox);
+            _config.CaseFanSensorKey = GetSelectedFanSensorKey(_caseFanSensorBox);
 
             for (int i = 0; i < _metricChecks.Length && i < _config.Metrics.Count; i++)
             {
@@ -416,6 +525,36 @@ namespace HwMonTray
             bool outlineEnabled = _outlineCheck.Checked;
             _outlineThicknessSlider.Enabled = outlineEnabled;
             _outlineThicknessValue.ForeColor = outlineEnabled ? FgPrimary : Color.FromArgb(95, 100, 110);
+        }
+
+        private void UpdateOutputState()
+        {
+            bool enabled = _enabledCheck.Checked;
+            _desktopOverlayCheck.Enabled = enabled;
+            _rtssOverlayCheck.Enabled = enabled;
+            _copyRtssDebugButton.Enabled = enabled && _rtssOverlayCheck.Checked;
+
+            if (!enabled)
+            {
+                _outputStatusBox.Text = "OSD is currently off." + Environment.NewLine + "Enable it here or use the tray toggle/hotkey.";
+                _outputStatusBox.ForeColor = Color.FromArgb(255, 195, 70);
+                return;
+            }
+
+            if (_rtssOverlayCheck.Checked)
+            {
+                var snapshot = RtssOverlayClient.GetStatusSnapshot();
+                _outputStatusBox.Text = snapshot.Status;
+                _outputStatusBox.ForeColor = snapshot.IsProcessRunning && snapshot.HasSharedMemory && snapshot.IsSlotOwned
+                    ? AccentGreen
+                    : Color.FromArgb(255, 195, 70);
+                return;
+            }
+
+            _outputStatusBox.Text = _desktopOverlayCheck.Checked
+                ? "Desktop OSD is enabled."
+                : "No output backend is enabled.";
+            _outputStatusBox.ForeColor = _desktopOverlayCheck.Checked ? AccentGreen : Color.FromArgb(255, 195, 70);
         }
 
         private Panel MakeCard(Control parent, string title, ref int y, int height, int width, int marginX)
@@ -458,6 +597,67 @@ namespace HwMonTray
             };
         }
 
+        private Label MakeSectionLabel(string text, int x, int y)
+        {
+            return new Label
+            {
+                Text = text.ToUpperInvariant(),
+                Location = new Point(x, y),
+                AutoSize = true,
+                ForeColor = Accent,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private Label MakeCaption(string text, int x, int y, int width)
+        {
+            return new Label
+            {
+                Text = text,
+                Location = new Point(x, y),
+                Size = new Size(width, Ui(28)),
+                ForeColor = Color.FromArgb(110, 116, 130),
+                Font = new Font("Segoe UI", 8.25f),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private Panel MakeReadOnlyDebugBox(Point location, Size size)
+        {
+            var host = new Panel
+            {
+                Location = location,
+                Size = size,
+                BackColor = BgInput,
+                Padding = new Padding(Ui(6), Ui(5), Ui(4), Ui(4))
+            };
+
+            host.Paint += (_, e) =>
+            {
+                using var pen = new Pen(Border);
+                e.Graphics.DrawRectangle(pen, 0, 0, host.Width - 1, host.Height - 1);
+            };
+
+            _outputStatusBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
+                BorderStyle = BorderStyle.None,
+                BackColor = BgInput,
+                ForeColor = FgSecondary,
+                Font = new Font("Consolas", 8.75f),
+                DetectUrls = false,
+                WordWrap = true,
+                TabStop = false,
+                Margin = Padding.Empty
+            };
+
+            host.Controls.Add(_outputStatusBox);
+            return host;
+        }
+
         private Label MakeValueLabel(string text, int x, int y)
         {
             return new Label
@@ -469,6 +669,22 @@ namespace HwMonTray
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent
+            };
+        }
+
+        private TextBox MakeHotkeyBox(string text, Point location, Size size)
+        {
+            return new TextBox
+            {
+                Text = text,
+                ReadOnly = true,
+                TextAlign = HorizontalAlignment.Center,
+                Location = location,
+                Size = size,
+                BackColor = BgInput,
+                ForeColor = Accent,
+                Font = new Font("Consolas", 12f, FontStyle.Bold),
+                BorderStyle = BorderStyle.FixedSingle
             };
         }
 
@@ -484,6 +700,13 @@ namespace HwMonTray
                 ForeColor = FgPrimary,
                 Font = new Font("Segoe UI", 9.5f)
             };
+        }
+
+        private ComboBox MakeFanSensorComboBox(Point location, Size size)
+        {
+            var comboBox = MakeComboBox(location, size);
+            comboBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            return comboBox;
         }
 
         private CheckBox MakeCheckBox(string text, int x, int y, bool isChecked)
@@ -630,6 +853,83 @@ namespace HwMonTray
             return result;
         }
 
+        private void WireHotkeyCapture(TextBox box, HotkeyCaptureTarget target, Func<string> currentDisplayProvider)
+        {
+            box.GotFocus += (_, _) =>
+            {
+                _isCapturing = true;
+                _activeHotkeyBox = box;
+                _activeHotkeyTarget = target;
+                box.Text = "Press shortcut...";
+                box.ForeColor = Color.FromArgb(255, 195, 70);
+            };
+
+            box.LostFocus += (_, _) =>
+            {
+                if (_activeHotkeyBox == box)
+                {
+                    _activeHotkeyBox = null;
+                }
+
+                _isCapturing = false;
+                box.ForeColor = Accent;
+                box.Text = currentDisplayProvider();
+            };
+
+            box.KeyDown += OnHotkeyKeyDown;
+        }
+
+        private void PopulateFanSensorChoices()
+        {
+            PopulateFanSensorChoice(_cpuFanSensorBox, _config.CpuFanSensorKey);
+            PopulateFanSensorChoice(_gpuFanSensorBox, _config.GpuFanSensorKey);
+            PopulateFanSensorChoice(_caseFanSensorBox, _config.CaseFanSensorKey);
+        }
+
+        private void PopulateFanSensorChoice(ComboBox comboBox, string selectedKey)
+        {
+            comboBox.Items.Clear();
+            comboBox.Items.Add(new FanSensorOption(string.Empty, "Auto detect"));
+
+            foreach (var option in _fanSensorOptions)
+            {
+                comboBox.Items.Add(option);
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedKey) &&
+                !_fanSensorOptions.Any(option => string.Equals(option.Key, selectedKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                comboBox.Items.Add(new FanSensorOption(selectedKey, "Missing sensor"));
+            }
+
+            comboBox.SelectedItem = comboBox.Items
+                .OfType<FanSensorOption>()
+                .FirstOrDefault(option => string.Equals(option.Key, selectedKey, StringComparison.OrdinalIgnoreCase))
+                ?? comboBox.Items[0];
+
+            comboBox.Enabled = comboBox.Items.Count > 0;
+        }
+
+        private static string GetSelectedFanSensorKey(ComboBox comboBox)
+        {
+            return comboBox.SelectedItem is FanSensorOption option ? option.Key : string.Empty;
+        }
+
+        private static string GetMetricGroupLabel(string key)
+        {
+            if (key.StartsWith("Cpu", StringComparison.OrdinalIgnoreCase))
+            {
+                return "CPU";
+            }
+
+            if (key.StartsWith("Gpu", StringComparison.OrdinalIgnoreCase))
+            {
+                return "GPU";
+            }
+
+            return "System";
+        }
+
         private void RestoreWindowBounds()
         {
             int fixedWidth = FixedWindowWidth();
@@ -671,6 +971,14 @@ namespace HwMonTray
         {
             base.OnShown(e);
             _scrollContainer?.RefreshScrollMetrics();
+            _statusTimer.Start();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _statusTimer.Stop();
+            _statusTimer.Dispose();
+            base.OnFormClosed(e);
         }
 
         private int Ui(int logicalPixels)
@@ -694,6 +1002,12 @@ namespace HwMonTray
             path.AddArc(0, height - diameter, diameter, diameter, 90, 90);
             path.CloseFigure();
             return new Region(path);
+        }
+
+        private enum HotkeyCaptureTarget
+        {
+            ToggleOsd,
+            OpenSettings
         }
     }
 

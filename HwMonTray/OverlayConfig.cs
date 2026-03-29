@@ -39,14 +39,19 @@ namespace HwMonTray
         public const string RamDisplayUsedAndTotal = "UsedAndTotal";
         public const string RamDisplayPercentage = "Percentage";
 
-        public bool Enabled { get; set; } = false;
+        public bool Enabled { get; set; } = true;
 
         // Hotkey (Win32 RegisterHotKey values)
         public string HotkeyDisplay { get; set; } = "Ctrl+Shift+O";
         public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
         public int HotkeyVk { get; set; } = 0x4F; // 'O'
+        public string SettingsHotkeyDisplay { get; set; } = "Ctrl+Shift+S";
+        public int SettingsHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
+        public int SettingsHotkeyVk { get; set; } = 0x53; // 'S'
 
         // Position & layout
+        public bool DesktopOverlayEnabled { get; set; } = true;
+        public bool RtssOverlayEnabled { get; set; } = false;
         public string Position { get; set; } = "TopRight";
         public int OffsetX { get; set; } = 20;
         public int OffsetY { get; set; } = 20;
@@ -63,6 +68,9 @@ namespace HwMonTray
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
         public int SettingsWindowHeight { get; set; } = 840;
+        public string CpuFanSensorKey { get; set; } = string.Empty;
+        public string GpuFanSensorKey { get; set; } = string.Empty;
+        public string CaseFanSensorKey { get; set; } = string.Empty;
 
         // Which metrics to show
         public List<OverlayMetric> Metrics { get; set; } = DefaultMetrics();
@@ -73,14 +81,50 @@ namespace HwMonTray
             new("CpuLoad",  "CPU Load",  true),
             new("CpuClock", "CPU Clock", false),
             new("CpuPower", "CPU Power", false),
+            new("CpuFan",   "CPU Fan",   false),
             new("GpuTemp",  "GPU Temp",  true),
             new("GpuLoad",  "GPU Load",  true),
             new("GpuClock", "GPU Clock", false),
             new("GpuVram",  "GPU VRAM",  false),
             new("GpuPower", "GPU Power", false),
+            new("GpuFan",   "GPU Fan",   false),
             new("RamUsage", "RAM Usage", true),
-            new("FanSpeed", "Fan Speed", false),
+            new("CaseFan",  "Case Fan",  false),
         };
+
+        public void NormalizeMetrics()
+        {
+            var defaults = DefaultMetrics();
+            var existing = Metrics ?? new List<OverlayMetric>();
+            var existingByKey = new Dictionary<string, OverlayMetric>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var metric in existing)
+            {
+                if (!string.IsNullOrWhiteSpace(metric.Key) && !existingByKey.ContainsKey(metric.Key))
+                {
+                    existingByKey[metric.Key] = metric;
+                }
+            }
+
+            bool legacyFanEnabled = existingByKey.TryGetValue("FanSpeed", out var legacyFanMetric) && legacyFanMetric.Enabled;
+            var normalized = new List<OverlayMetric>(defaults.Count);
+
+            foreach (var defaultMetric in defaults)
+            {
+                if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
+                {
+                    normalized.Add(new OverlayMetric(defaultMetric.Key, defaultMetric.Label, currentMetric.Enabled));
+                    continue;
+                }
+
+                bool enabled = legacyFanEnabled && string.Equals(defaultMetric.Key, "CpuFan", StringComparison.OrdinalIgnoreCase)
+                    ? true
+                    : defaultMetric.Enabled;
+                normalized.Add(new OverlayMetric(defaultMetric.Key, defaultMetric.Label, enabled));
+            }
+
+            Metrics = normalized;
+        }
 
         public OverlayPosition GetPosition()
         {
@@ -101,6 +145,11 @@ namespace HwMonTray
         public bool HasBackground()
         {
             return !string.Equals(BackgroundMode, BackgroundNone, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool HasAnyOverlayBackendEnabled()
+        {
+            return DesktopOverlayEnabled || RtssOverlayEnabled;
         }
 
         public bool HasSavedSettingsWindowBounds()

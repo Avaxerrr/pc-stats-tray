@@ -30,11 +30,14 @@ namespace HwMonTray
         private static ContextMenuStrip contextMenu = null!;
         private static System.Windows.Forms.Timer timer = null!;
         private static DetailsForm? detailsForm;
+        private static OverlaySettingsForm? settingsForm;
 
         // OSD Overlay
         private static OverlayForm? overlayForm;
         private static OverlayConfig overlayConfig = null!;
         private static HotkeyWindow? hotkeyWindow;
+        private static RtssOverlayClient? rtssOverlayClient;
+        private static ToolStripMenuItem? rtssStatusItem;
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -102,6 +105,7 @@ namespace HwMonTray
 
             // Create overlay (hidden by default)
             overlayForm = new OverlayForm(computer, overlayConfig);
+            rtssOverlayClient = new RtssOverlayClient();
 
             // Register global hotkey
             hotkeyWindow = new HotkeyWindow();
@@ -109,6 +113,7 @@ namespace HwMonTray
             RegisterCurrentHotkey();
 
             UpdateData();
+            ApplyOverlayOutputs();
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 2000;
@@ -148,11 +153,14 @@ namespace HwMonTray
             toggleOsdItem.Click += (s, e) => ToggleOverlay();
             contextMenu.Items.Add(toggleOsdItem);
 
-            contextMenu.Items.Add("OSD Settings…", null, (s, e) =>
+            contextMenu.Items.Add($"OSD Settings…  ({overlayConfig.SettingsHotkeyDisplay})", null, (s, e) => OpenOverlaySettings());
+
+            rtssStatusItem = new ToolStripMenuItem("RTSS: checking…")
             {
-                var settingsForm = new OverlaySettingsForm(overlayConfig, OnOverlayConfigSaved);
-                settingsForm.ShowDialog();
-            });
+                Enabled = false
+            };
+            contextMenu.Items.Add(rtssStatusItem);
+            UpdateRtssStatusMenu();
 
             contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -178,24 +186,23 @@ namespace HwMonTray
                 overlayForm = new OverlayForm(computer, overlayConfig);
             }
 
-            if (overlayForm.Visible)
-            {
-                overlayForm.Hide();
-                overlayConfig.Enabled = false;
-            }
-            else
-            {
-                overlayForm.Show();
-                overlayForm.RefreshData();
-                overlayConfig.Enabled = true;
-            }
+            overlayConfig.Enabled = !overlayConfig.Enabled;
 
+            ApplyOverlayOutputs();
             SaveOverlayConfig(overlayConfig);
         }
 
-        private static void OnHotkeyPressed()
+        private static void OnHotkeyPressed(int hotkeyId)
         {
-            ToggleOverlay();
+            switch (hotkeyId)
+            {
+                case 1:
+                    ToggleOverlay();
+                    break;
+                case 2:
+                    OpenOverlaySettings();
+                    break;
+            }
         }
 
         private static void OnOverlayConfigSaved(OverlayConfig config)
@@ -212,6 +219,7 @@ namespace HwMonTray
                 overlayForm.UpdateConfig(config);
             }
 
+            ApplyOverlayOutputs();
             SaveOverlayConfig(config);
 
             // Refresh context menu to show new hotkey
@@ -225,6 +233,12 @@ namespace HwMonTray
                 HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 1,
                     (uint)overlayConfig.HotkeyModifiers, (uint)overlayConfig.HotkeyVk);
             }
+
+            if (hotkeyWindow != null && overlayConfig.SettingsHotkeyVk != 0)
+            {
+                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 2,
+                    (uint)overlayConfig.SettingsHotkeyModifiers, (uint)overlayConfig.SettingsHotkeyVk);
+            }
         }
 
         private static void UnregisterCurrentHotkey()
@@ -232,6 +246,7 @@ namespace HwMonTray
             if (hotkeyWindow != null)
             {
                 HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 1);
+                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 2);
             }
         }
 
@@ -246,17 +261,23 @@ namespace HwMonTray
                     string json = File.ReadAllText(ConfigPath);
                     var cfg = JsonSerializer.Deserialize<AppConfigFull>(json);
                     if (cfg?.Overlay != null)
+                    {
+                        cfg.Overlay.NormalizeMetrics();
                         return cfg.Overlay;
+                    }
                 }
             }
             catch { }
-            return new OverlayConfig();
+            var overlay = new OverlayConfig();
+            overlay.NormalizeMetrics();
+            return overlay;
         }
 
         internal static void SaveOverlayConfig(OverlayConfig overlay)
         {
             try
             {
+                overlay.NormalizeMetrics();
                 AppConfigFull cfg;
                 if (File.Exists(ConfigPath))
                 {
@@ -362,6 +383,8 @@ namespace HwMonTray
 
             // Refresh overlay if visible
             overlayForm?.RefreshData();
+            SyncRtssOverlay();
+            UpdateRtssStatusMenu();
         }
 
         private static void UpdateIcon()
@@ -515,6 +538,15 @@ namespace HwMonTray
                 overlayForm.Dispose();
             }
 
+            if (settingsForm != null && !settingsForm.IsDisposed)
+            {
+                settingsForm.Close();
+                settingsForm.Dispose();
+            }
+
+             rtssOverlayClient?.Release();
+             rtssOverlayClient?.Dispose();
+
             if (cpuTrayIcon != null)
             {
                 cpuTrayIcon.Visible = false;
@@ -530,6 +562,124 @@ namespace HwMonTray
                 computer.Close();
             }
         }
+
+        private static void ApplyOverlayOutputs()
+        {
+            if (overlayForm == null || overlayForm.IsDisposed)
+            {
+                overlayForm = new OverlayForm(computer, overlayConfig);
+            }
+
+            if (rtssOverlayClient == null)
+            {
+                rtssOverlayClient = new RtssOverlayClient();
+            }
+
+            if (overlayConfig.Enabled && overlayConfig.DesktopOverlayEnabled)
+            {
+                if (!overlayForm.Visible)
+                {
+                    overlayForm.Show();
+                }
+
+                overlayForm.RefreshData();
+            }
+            else if (overlayForm.Visible)
+            {
+                overlayForm.Hide();
+            }
+
+            if (overlayConfig.Enabled && overlayConfig.RtssOverlayEnabled)
+            {
+                SyncRtssOverlay();
+            }
+            else
+            {
+                rtssOverlayClient.Release();
+            }
+        }
+
+        private static void SyncRtssOverlay()
+        {
+            if (rtssOverlayClient == null || !overlayConfig.Enabled || !overlayConfig.RtssOverlayEnabled)
+            {
+                return;
+            }
+
+            if (overlayForm == null || overlayForm.IsDisposed)
+            {
+                return;
+            }
+
+            string text = overlayForm.BuildOsdText();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                rtssOverlayClient.Release();
+            }
+            else
+            {
+                rtssOverlayClient.Update(text);
+            }
+        }
+
+        private static void OpenOverlaySettings()
+        {
+            if (settingsForm == null || settingsForm.IsDisposed)
+            {
+                settingsForm = new OverlaySettingsForm(computer, overlayConfig, OnOverlayConfigSaved);
+            }
+
+            settingsForm.Show();
+            if (settingsForm.WindowState == FormWindowState.Minimized)
+            {
+                settingsForm.WindowState = FormWindowState.Normal;
+            }
+
+            settingsForm.BringToFront();
+            settingsForm.Activate();
+        }
+
+        private static void UpdateRtssStatusMenu()
+        {
+            if (rtssStatusItem == null)
+            {
+                return;
+            }
+
+            if (!overlayConfig.RtssOverlayEnabled)
+            {
+                rtssStatusItem.Text = "RTSS: disabled";
+                return;
+            }
+
+            var snapshot = RtssOverlayClient.GetStatusSnapshot();
+            if (!snapshot.IsProcessRunning)
+            {
+                rtssStatusItem.Text = "RTSS: not running";
+                return;
+            }
+
+            if (!snapshot.HasSharedMemory)
+            {
+                rtssStatusItem.Text = "RTSS: shared memory unavailable";
+                return;
+            }
+
+            if (!snapshot.IsSlotOwned)
+            {
+                rtssStatusItem.Text = "RTSS: waiting for slot";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.LastForegroundAppName))
+            {
+                string appName = Path.GetFileName(snapshot.LastForegroundAppName);
+                rtssStatusItem.Text = $"RTSS: {appName} ({snapshot.LastForegroundApi})";
+                return;
+            }
+
+            rtssStatusItem.Text = "RTSS: ready";
+        }
     }
 
     /// <summary>
@@ -539,7 +689,7 @@ namespace HwMonTray
     {
         private const int WM_HOTKEY = 0x0312;
 
-        public event Action? HotkeyPressed;
+        public event Action<int>? HotkeyPressed;
 
         [DllImport("user32.dll")]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -556,7 +706,7 @@ namespace HwMonTray
         {
             if (m.Msg == WM_HOTKEY)
             {
-                HotkeyPressed?.Invoke();
+                HotkeyPressed?.Invoke(m.WParam.ToInt32());
             }
             base.WndProc(ref m);
         }
