@@ -78,6 +78,31 @@ namespace PCStatsTray
             }
         }
 
+        public static bool LoadSuppressPawnIoPrompt(string path)
+        {
+            try
+            {
+                return LoadFullConfig(path)?.SuppressPawnIoPrompt == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static void SaveSuppressPawnIoPrompt(string path, bool suppress)
+        {
+            try
+            {
+                var config = LoadFullConfig(path) ?? new StoredAppConfig();
+                config.SuppressPawnIoPrompt = suppress;
+                SaveFullConfig(path, config);
+            }
+            catch
+            {
+            }
+        }
+
         private static StoredAppConfig? LoadFullConfig(string path)
         {
             if (!File.Exists(path))

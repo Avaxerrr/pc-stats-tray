@@ -55,5 +55,39 @@ namespace PCStatsTray.Tests
             Assert.IsTrue(overlay.Metrics.Count > 0);
             Assert.AreEqual("CpuTemp", overlay.Metrics[0].Key);
         }
+
+        [TestMethod]
+        public void SaveSuppressPawnIoPrompt_PreservesOverlayAndHiddenSensors()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                AppConfigStore.SaveHiddenSensors(path, new[] { "cpu/temp" });
+                AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
+                {
+                    Enabled = false,
+                    FontFamily = "Consolas"
+                });
+
+                AppConfigStore.SaveSuppressPawnIoPrompt(path, true);
+
+                var hiddenSensors = AppConfigStore.LoadHiddenSensors(path);
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+                bool suppressPrompt = AppConfigStore.LoadSuppressPawnIoPrompt(path);
+
+                CollectionAssert.AreEquivalent(new[] { "cpu/temp" }, hiddenSensors.ToArray());
+                Assert.IsFalse(overlay.Enabled);
+                Assert.AreEqual("Consolas", overlay.FontFamily);
+                Assert.IsTrue(suppressPrompt);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
     }
 }

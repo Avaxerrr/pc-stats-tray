@@ -31,13 +31,13 @@ To use the app, you may need these downloads:
 - `Website`: [Open the landing page](https://avaxerrr.github.io/pc-stats-tray/)
 - `App download`: [Download the latest release](https://github.com/Avaxerrr/pc-stats-tray/releases/latest)
 - `.NET 10 Desktop Runtime`: [Download from Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
-- `RTSS`: [Download RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)
+- `RTSS`: [Download RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)`r`n- `PawnIO`: [Official site](https://pawnio.eu/)
 
 What these mean:
 
 - `App download` is the ready-to-run exe from the GitHub Releases page
 - `.NET 10 Desktop Runtime` is something Windows may need before the app can open
-- `RTSS` is only needed if you want the overlay to appear inside games
+- `RTSS` is only needed if you want the overlay to appear inside games`r`n- `PawnIO` may be needed for full CPU temperature, clock, and power sensors on some systems
 
 If you only want the tray icon and desktop overlay, you do not need RTSS.
 
@@ -50,8 +50,18 @@ If you only want the tray icon and desktop overlay, you do not need RTSS.
 5. Choose the metrics you want.
 6. Turn on `Desktop OSD` if you want stats on your desktop.
 7. Turn on `RTSS OSD (Games)` only if RTSS is installed and open.
-8. Click `Save`.
+8. Changes apply immediately.
 
+
+## First run and CPU sensors
+
+On some systems, the app can read `CPU Load` right away but `CPU Temp`, `CPU Clock`, and `CPU Power` stay blank.
+
+If that happens, PC Stats Tray shows a startup note explaining that full CPU sensors may require PawnIO, which is the official low-level backend used by LibreHardwareMonitor on some systems.
+
+- Official PawnIO site: [pawnio.eu](https://pawnio.eu/)
+- The app keeps running even if you do not install it
+- You can reopen the explanation any time from `CPU Sensor Setup...` in the tray menu
 ## Want stats inside games?
 
 Do this:
@@ -110,13 +120,13 @@ GitHub Actions is set up for this repo now:
 Example release tag:
 
 ```text
-v0.4.0
+v0.4.1
 ```
 
 That release uploads a file named like:
 
 ```text
-PCStatsTray_v0.4.0_win-x64.exe
+PCStatsTray_v0.4.1_win-x64.exe
 ```
 
 ## Credits
@@ -163,3 +173,6 @@ This is a single-file publish, but it still requires the .NET 10 Desktop Runtime
 This project is released under the MIT License. See [LICENSE](LICENSE).
 
 The MIT license applies to PC Stats Tray itself. Third-party components keep their own upstream notices and license terms.
+
+
+

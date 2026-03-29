@@ -9,5 +9,6 @@ namespace PCStatsTray
     {
         public List<string> HiddenSensors { get; set; } = new();
         public OverlayConfig? Overlay { get; set; }
+        public bool SuppressPawnIoPrompt { get; set; }
     }
 }

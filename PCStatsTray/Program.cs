@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -38,6 +39,8 @@ namespace PCStatsTray
         private static GlobalHotkeyService? hotkeyService;
         private static RtssOverlayClient? rtssOverlayClient;
         private static ToolStripMenuItem? rtssStatusItem;
+        private static ToolStripMenuItem? cpuSensorSetupItem;
+        private static CpuSensorSetupStatus cpuSensorSetupStatus = new();
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -82,6 +85,9 @@ namespace PCStatsTray
             // Load overlay config
             overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
+            computer.Accept(new UpdateVisitor());
+            cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+
             contextMenu = new ContextMenuStrip();
             PopulateInitialMenu();
 
@@ -110,6 +116,7 @@ namespace PCStatsTray
 
             UpdateData();
             ApplyOverlayOutputs();
+            MaybeShowPawnIoPrompt();
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 2000;
@@ -134,13 +141,20 @@ namespace PCStatsTray
             contextMenu.Items.Add(refreshRateItem);
             contextMenu.Items.Add(new ToolStripSeparator());
 
-            contextMenu.Items.Add("Show Details", null, (s, e) =>
+            contextMenu.Items.Add("Show All Sensors", null, (s, e) =>
             {
                 if (detailsForm == null || detailsForm.IsDisposed)
                     detailsForm = new DetailsForm(computer);
                 detailsForm.Show();
                 detailsForm.BringToFront();
             });
+
+            cpuSensorSetupItem = new ToolStripMenuItem(BuildCpuSensorSetupMenuText())
+            {
+                Available = ShouldShowCpuSensorSetupItem()
+            };
+            cpuSensorSetupItem.Click += (s, e) => OpenCpuSensorSetup();
+            contextMenu.Items.Add(cpuSensorSetupItem);
 
             // OSD overlay menu items
             contextMenu.Items.Add(new ToolStripSeparator());
@@ -281,15 +295,128 @@ namespace PCStatsTray
             }
         }
 
-        private static void UpdateData()
+                private static void UpdateData()
         {
             computer.Accept(new UpdateVisitor());
+            cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+            UpdateCpuSensorSetupMenu();
             UpdateIcon();
 
             // Refresh overlay if visible
             overlayForm?.RefreshData();
             SyncRtssOverlay();
             UpdateRtssStatusMenu();
+        }
+
+        private static void MaybeShowPawnIoPrompt()
+        {
+            if (!cpuSensorSetupStatus.ShouldRecommendPawnIo)
+            {
+                return;
+            }
+
+            if (AppConfigStore.LoadSuppressPawnIoPrompt(AppConfigStore.DefaultPath))
+            {
+                return;
+            }
+
+            var result = MessageBox.Show(
+                CpuSensorSetupAdvisor.BuildPromptMessage(cpuSensorSetupStatus, allowSuppress: true),
+                "CPU Sensor Setup",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Information);
+
+            if (result == DialogResult.Yes)
+            {
+                OpenPawnIoWebsite();
+                return;
+            }
+
+            if (result == DialogResult.Cancel)
+            {
+                AppConfigStore.SaveSuppressPawnIoPrompt(AppConfigStore.DefaultPath, suppress: true);
+            }
+        }
+
+        private static void OpenCpuSensorSetup()
+        {
+            computer.Accept(new UpdateVisitor());
+            cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+            UpdateCpuSensorSetupMenu();
+
+            if (cpuSensorSetupStatus.ShouldRecommendPawnIo)
+            {
+                var result = MessageBox.Show(
+                    CpuSensorSetupAdvisor.BuildPromptMessage(cpuSensorSetupStatus, allowSuppress: false),
+                    "CPU Sensor Setup",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
+
+                if (result == DialogResult.Yes)
+                {
+                    OpenPawnIoWebsite();
+                }
+
+                return;
+            }
+
+            var manualResult = MessageBox.Show(
+                CpuSensorSetupAdvisor.BuildManualHelpMessage(cpuSensorSetupStatus),
+                "CPU Sensor Setup",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+
+            if (manualResult == DialogResult.Yes)
+            {
+                OpenPawnIoWebsite();
+            }
+        }
+
+        private static void OpenPawnIoWebsite()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = CpuSensorSetupAdvisor.OfficialUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to open the official PawnIO site: " + ex.Message, "CPU Sensor Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static bool ShouldShowCpuSensorSetupItem()
+        {
+            return !cpuSensorSetupStatus.IsPawnIoInstalled;
+        }
+
+        private static string BuildCpuSensorSetupMenuText()
+        {
+            if (cpuSensorSetupStatus.ShouldRecommendPawnIo)
+            {
+                return "CPU Sensor Setup... (Recommended)";
+            }
+
+            if (cpuSensorSetupStatus.IsPawnIoInstalled)
+            {
+                return "CPU Sensor Setup... (Installed)";
+            }
+
+            return "CPU Sensor Setup...";
+        }
+
+        private static void UpdateCpuSensorSetupMenu()
+        {
+            if (cpuSensorSetupItem == null)
+            {
+                return;
+            }
+
+            cpuSensorSetupItem.Text = BuildCpuSensorSetupMenuText();
+            cpuSensorSetupItem.Available = ShouldShowCpuSensorSetupItem();
         }
 
         private static void UpdateIcon()
@@ -693,3 +820,8 @@ namespace PCStatsTray
         }
     }
 }
+
+
+
+
+
