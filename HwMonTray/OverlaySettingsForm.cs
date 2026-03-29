@@ -31,10 +31,16 @@ namespace HwMonTray
         private string _capturedDisplay = "";
         private bool _isCapturing;
 
-        private int _selectedCorner;
-        private Panel _cornerPicker = null!;
-        private TrackBar _marginSlider = null!;
-        private Label _marginValue = null!;
+        private bool _alignRight;
+        private bool _alignBottom;
+        private Button _horizontalLeftButton = null!;
+        private Button _horizontalRightButton = null!;
+        private Button _verticalTopButton = null!;
+        private Button _verticalBottomButton = null!;
+        private TrackBar _horizontalMarginSlider = null!;
+        private Label _horizontalMarginValue = null!;
+        private TrackBar _verticalMarginSlider = null!;
+        private Label _verticalMarginValue = null!;
         private TrackBar _opacitySlider = null!;
         private Label _opacityValue = null!;
         private TrackBar _fontSlider = null!;
@@ -57,13 +63,13 @@ namespace HwMonTray
             _capturedMods = config.HotkeyModifiers;
             _capturedVk = config.HotkeyVk;
             _capturedDisplay = config.HotkeyDisplay;
-            _selectedCorner = config.Position switch
+            (_alignRight, _alignBottom) = config.Position switch
             {
-                "TopLeft" => 0,
-                "TopRight" => 1,
-                "BottomLeft" => 2,
-                "BottomRight" => 3,
-                _ => 1
+                "TopLeft" => (false, false),
+                "TopRight" => (true, false),
+                "BottomLeft" => (false, true),
+                "BottomRight" => (true, true),
+                _ => (true, false)
             };
 
             Text = "OSD Settings";
@@ -129,29 +135,65 @@ namespace HwMonTray
             _hotkeyBox.KeyDown += OnHotkeyKeyDown;
             hotkeyCard.Controls.Add(_hotkeyBox);
 
-            var posCard = MakeCard(content, "Position", ref y, Ui(126), cardWidth, marginX);
-            _cornerPicker = new Panel
+            var posCard = MakeCard(content, "Position", ref y, Ui(240), cardWidth, marginX);
+            posCard.Controls.Add(MakeLabel("Horizontal", Ui(16), Ui(42)));
+            _horizontalLeftButton = MakeSegmentButton("Left", new Point(Ui(132), Ui(38)), new Size(Ui(70), Ui(30)));
+            _horizontalRightButton = MakeSegmentButton("Right", new Point(Ui(204), Ui(38)), new Size(Ui(70), Ui(30)));
+            _horizontalLeftButton.Click += (_, _) =>
             {
-                Location = new Point(Ui(16), Ui(38)),
-                Size = new Size(Ui(84), Ui(62)),
-                BackColor = Color.Transparent,
-                Cursor = Cursors.Hand
-            };
-            _cornerPicker.Paint += PaintCornerPicker;
-            _cornerPicker.MouseClick += OnCornerPickerClick;
-            posCard.Controls.Add(_cornerPicker);
-
-            posCard.Controls.Add(MakeLabel("Pick a corner", Ui(112), Ui(42)));
-            posCard.Controls.Add(MakeLabel("Edge margin", Ui(112), Ui(72)));
-
-            _marginValue = MakeValueLabel($"{_config.OffsetX} px", posCard.Width - Ui(68), Ui(72));
-            posCard.Controls.Add(_marginValue);
-            _marginSlider = MakeSlider(posCard, Ui(112), Ui(92), posCard.Width - Ui(132), 5, 160, Math.Max(_config.OffsetX, _config.OffsetY));
-            _marginSlider.ValueChanged += (_, _) =>
-            {
-                _marginValue.Text = $"{_marginSlider.Value} px";
+                _alignRight = false;
+                UpdatePositionButtons();
                 ApplyLive();
             };
+            _horizontalRightButton.Click += (_, _) =>
+            {
+                _alignRight = true;
+                UpdatePositionButtons();
+                ApplyLive();
+            };
+            posCard.Controls.Add(_horizontalLeftButton);
+            posCard.Controls.Add(_horizontalRightButton);
+
+            posCard.Controls.Add(MakeLabel("Vertical", Ui(16), Ui(82)));
+            _verticalTopButton = MakeSegmentButton("Top", new Point(Ui(132), Ui(78)), new Size(Ui(70), Ui(30)));
+            _verticalBottomButton = MakeSegmentButton("Bottom", new Point(Ui(204), Ui(78)), new Size(Ui(70), Ui(30)));
+            _verticalTopButton.Click += (_, _) =>
+            {
+                _alignBottom = false;
+                UpdatePositionButtons();
+                ApplyLive();
+            };
+            _verticalBottomButton.Click += (_, _) =>
+            {
+                _alignBottom = true;
+                UpdatePositionButtons();
+                ApplyLive();
+            };
+            posCard.Controls.Add(_verticalTopButton);
+            posCard.Controls.Add(_verticalBottomButton);
+
+            posCard.Controls.Add(MakeLabel("Horizontal margin", Ui(16), Ui(122)));
+
+            _horizontalMarginValue = MakeValueLabel($"{_config.OffsetX} px", posCard.Width - Ui(68), Ui(122));
+            posCard.Controls.Add(_horizontalMarginValue);
+            _horizontalMarginSlider = MakeSlider(posCard, Ui(16), Ui(142), posCard.Width - Ui(36), 5, 160, _config.OffsetX);
+            _horizontalMarginSlider.ValueChanged += (_, _) =>
+            {
+                _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
+                ApplyLive();
+            };
+
+            posCard.Controls.Add(MakeLabel("Vertical margin", Ui(16), Ui(170)));
+
+            _verticalMarginValue = MakeValueLabel($"{_config.OffsetY} px", posCard.Width - Ui(68), Ui(170));
+            posCard.Controls.Add(_verticalMarginValue);
+            _verticalMarginSlider = MakeSlider(posCard, Ui(16), Ui(190), posCard.Width - Ui(36), 5, 160, _config.OffsetY);
+            _verticalMarginSlider.ValueChanged += (_, _) =>
+            {
+                _verticalMarginValue.Text = $"{_verticalMarginSlider.Value} px";
+                ApplyLive();
+            };
+            UpdatePositionButtons();
 
             var appearanceCard = MakeCard(content, "Appearance", ref y, Ui(356), cardWidth, marginX);
             appearanceCard.Controls.Add(MakeLabel("Background", Ui(16), Ui(42)));
@@ -287,55 +329,6 @@ namespace HwMonTray
             Controls.Add(bottom);
         }
 
-        private void PaintCornerPicker(object? sender, PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            int width = _cornerPicker.Width;
-            int height = _cornerPicker.Height;
-            int boxWidth = Ui(32);
-            int boxHeight = Ui(24);
-            int gap = Ui(6);
-
-            using (var pen = new Pen(Color.FromArgb(60, 65, 75), Math.Max(1, Ui(1))))
-            {
-                g.DrawRoundedRectangle(pen, 1, 1, width - 3, height - 3, Ui(4));
-            }
-
-            var positions = new[]
-            {
-                new Point(gap, gap),
-                new Point(width - boxWidth - gap, gap),
-                new Point(gap, height - boxHeight - gap),
-                new Point(width - boxWidth - gap, height - boxHeight - gap)
-            };
-
-            for (int i = 0; i < positions.Length; i++)
-            {
-                var rect = new Rectangle(positions[i].X, positions[i].Y, boxWidth, boxHeight);
-                using var brush = new SolidBrush(i == _selectedCorner ? Accent : Color.FromArgb(48, 50, 58));
-                g.FillRoundedRectangle(brush, rect, Ui(4));
-            }
-        }
-
-        private void OnCornerPickerClick(object? sender, MouseEventArgs e)
-        {
-            bool left = e.X < _cornerPicker.Width / 2;
-            bool top = e.Y < _cornerPicker.Height / 2;
-
-            _selectedCorner = (top, left) switch
-            {
-                (true, true) => 0,
-                (true, false) => 1,
-                (false, true) => 2,
-                (false, false) => 3
-            };
-
-            _cornerPicker.Invalidate();
-            ApplyLive();
-        }
-
         private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
         {
             if (!_isCapturing)
@@ -384,18 +377,16 @@ namespace HwMonTray
             _config.HotkeyModifiers = _capturedMods == 0 ? _config.HotkeyModifiers : _capturedMods;
             _config.HotkeyVk = _capturedVk == 0 ? _config.HotkeyVk : _capturedVk;
 
-            _config.Position = _selectedCorner switch
+            _config.Position = (_alignRight, _alignBottom) switch
             {
-                0 => "TopLeft",
-                1 => "TopRight",
-                2 => "BottomLeft",
-                3 => "BottomRight",
-                _ => "TopRight"
+                (false, false) => "TopLeft",
+                (true, false) => "TopRight",
+                (false, true) => "BottomLeft",
+                (true, true) => "BottomRight"
             };
 
-            int margin = _marginSlider.Value;
-            _config.OffsetX = margin;
-            _config.OffsetY = margin;
+            _config.OffsetX = _horizontalMarginSlider.Value;
+            _config.OffsetY = _verticalMarginSlider.Value;
             _config.Opacity = _opacitySlider.Value / 100f;
             _config.FontSize = _fontSlider.Value;
             _config.FontFamily = _fontFamilyBox.SelectedItem?.ToString() ?? _config.FontFamily;
@@ -508,6 +499,48 @@ namespace HwMonTray
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
+        }
+
+        private Button MakeSegmentButton(string text, Point location, Size size)
+        {
+            var button = new Button
+            {
+                Text = text,
+                Location = location,
+                Size = size,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = BgInput,
+                ForeColor = FgSecondary,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = Border;
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(48, 52, 62);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(55, 60, 72);
+            return button;
+        }
+
+        private void UpdatePositionButtons()
+        {
+            ApplySegmentState(_horizontalLeftButton, !_alignRight);
+            ApplySegmentState(_horizontalRightButton, _alignRight);
+            ApplySegmentState(_verticalTopButton, !_alignBottom);
+            ApplySegmentState(_verticalBottomButton, _alignBottom);
+        }
+
+        private void ApplySegmentState(Button button, bool isSelected)
+        {
+            button.BackColor = isSelected ? Accent : BgInput;
+            button.ForeColor = isSelected ? Color.White : FgSecondary;
+            button.FlatAppearance.BorderColor = isSelected ? Accent : Border;
+            button.FlatAppearance.MouseOverBackColor = isSelected
+                ? Color.FromArgb(95, 165, 255)
+                : Color.FromArgb(48, 52, 62);
+            button.FlatAppearance.MouseDownBackColor = isSelected
+                ? Color.FromArgb(70, 135, 230)
+                : Color.FromArgb(55, 60, 72);
         }
 
         private void AddSliderRow(
