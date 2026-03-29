@@ -872,6 +872,7 @@ namespace PCStatsTray
             {
                 Text = text,
                 ReadOnly = true,
+                TabStop = false,
                 TextAlign = HorizontalAlignment.Center,
                 Location = location,
                 Size = size,
@@ -1151,6 +1152,7 @@ namespace PCStatsTray
             base.OnShown(e);
             _scrollContainer?.RefreshScrollMetrics();
             _statusTimer.Start();
+            BeginInvoke((Action)(() => ActiveControl = _enabledCheck));
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
