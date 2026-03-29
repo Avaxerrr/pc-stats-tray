@@ -1,6 +1,6 @@
 # PC Stats Tray
 
-[![Build and Release](../../actions/workflows/build-release.yml/badge.svg)](../../actions/workflows/build-release.yml)
+[![Build and Release](https://github.com/Avaxerrr/pc-stats-tray/actions/workflows/build-release.yml/badge.svg)](https://github.com/Avaxerrr/pc-stats-tray/actions/workflows/build-release.yml)
 ![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -27,7 +27,7 @@ If you want a lightweight monitor instead of a big dashboard always open, this i
 
 To use the app, you may need these downloads:
 
-- `App download`: [Download the latest release](../../releases/latest)
+- `App download`: [Download the latest release](https://github.com/Avaxerrr/pc-stats-tray/releases/latest)
 - `.NET 10 Desktop Runtime`: [Download from Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - `RTSS`: [Download RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)
 
