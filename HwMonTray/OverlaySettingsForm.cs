@@ -33,6 +33,11 @@ namespace HwMonTray
 
         private bool _alignRight;
         private bool _alignBottom;
+        private CheckBox _enabledCheck = null!;
+        private CheckBox _desktopOverlayCheck = null!;
+        private CheckBox _rtssOverlayCheck = null!;
+        private Button _copyRtssDebugButton = null!;
+        private TextBox _outputStatusBox = null!;
         private Button _horizontalLeftButton = null!;
         private Button _horizontalRightButton = null!;
         private Button _verticalTopButton = null!;
@@ -55,6 +60,7 @@ namespace HwMonTray
         private Label _outlineThicknessValue = null!;
         private CheckBox[] _metricChecks = Array.Empty<CheckBox>();
         private ModernScrollContainer? _scrollContainer;
+        private readonly System.Windows.Forms.Timer _statusTimer;
 
         public OverlaySettingsForm(OverlayConfig config, Action<OverlayConfig> onSave)
         {
@@ -86,9 +92,12 @@ namespace HwMonTray
             AutoScaleMode = AutoScaleMode.Dpi;
             MinimumSize = new Size(FixedWindowWidth(), 640);
             MaximumSize = new Size(FixedWindowWidth(), 2000);
+            _statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _statusTimer.Tick += (_, _) => UpdateOutputState();
 
             BuildUI();
             UpdateAppearanceState();
+            UpdateOutputState();
             RestoreWindowBounds();
 
             ResizeEnd += (_, _) => PersistWindowBounds();
@@ -134,6 +143,47 @@ namespace HwMonTray
             };
             _hotkeyBox.KeyDown += OnHotkeyKeyDown;
             hotkeyCard.Controls.Add(_hotkeyBox);
+
+            var outputCard = MakeCard(content, "Output", ref y, Ui(296), cardWidth, marginX);
+            _enabledCheck = MakeCheckBox("Enable OSD", Ui(16), Ui(42), _config.Enabled);
+            _enabledCheck.CheckedChanged += (_, _) =>
+            {
+                UpdateOutputState();
+                ApplyLive();
+            };
+            outputCard.Controls.Add(_enabledCheck);
+
+            _desktopOverlayCheck = MakeCheckBox("Desktop OSD", Ui(16), Ui(72), _config.DesktopOverlayEnabled);
+            _desktopOverlayCheck.CheckedChanged += (_, _) =>
+            {
+                UpdateOutputState();
+                ApplyLive();
+            };
+            outputCard.Controls.Add(_desktopOverlayCheck);
+
+            _rtssOverlayCheck = MakeCheckBox("RTSS OSD (Games)", Ui(16), Ui(102), _config.RtssOverlayEnabled);
+            _rtssOverlayCheck.CheckedChanged += (_, _) =>
+            {
+                UpdateOutputState();
+                ApplyLive();
+            };
+            outputCard.Controls.Add(_rtssOverlayCheck);
+            outputCard.Controls.Add(MakeCaption("RTSS output requires RivaTuner Statistics Server to be running.", Ui(16), Ui(132), outputCard.Width - Ui(32)));
+            _outputStatusBox = MakeReadOnlyDebugBox(new Point(Ui(16), Ui(156)), new Size(outputCard.Width - Ui(32), Ui(98)));
+            outputCard.Controls.Add(_outputStatusBox);
+            _copyRtssDebugButton = MakeButton("Copy RTSS Debug", Ui(16), Ui(262), Ui(122), Ui(28), Color.FromArgb(50, 52, 60), FgPrimary, FontStyle.Regular);
+            _copyRtssDebugButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
+            _copyRtssDebugButton.Click += (_, _) =>
+            {
+                try
+                {
+                    Clipboard.SetText(RtssOverlayClient.BuildDebugReport());
+                }
+                catch
+                {
+                }
+            };
+            outputCard.Controls.Add(_copyRtssDebugButton);
 
             var posCard = MakeCard(content, "Position", ref y, Ui(240), cardWidth, marginX);
             posCard.Controls.Add(MakeLabel("Horizontal", Ui(16), Ui(42)));
@@ -275,18 +325,42 @@ namespace HwMonTray
             ramCard.Controls.Add(_ramDisplayModeBox);
 
             int metricRowHeight = Ui(30);
-            int metricsHeight = Ui(40) + (_config.Metrics.Count * metricRowHeight) + Ui(10);
+            int metricGroupHeaderHeight = Ui(22);
+            int metricsHeight = Ui(40) + Ui(10);
+            string? previousMetricGroup = null;
+            foreach (var metric in _config.Metrics)
+            {
+                string group = GetMetricGroupLabel(metric.Key);
+                if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
+                {
+                    metricsHeight += metricGroupHeaderHeight;
+                    previousMetricGroup = group;
+                }
+
+                metricsHeight += metricRowHeight;
+            }
             var metricsCard = MakeCard(content, "Metrics", ref y, metricsHeight, cardWidth, marginX);
             _metricChecks = new CheckBox[_config.Metrics.Count];
 
+            int metricY = Ui(40);
+            previousMetricGroup = null;
             for (int i = 0; i < _config.Metrics.Count; i++)
             {
                 var metric = _config.Metrics[i];
-                var check = MakeCheckBox(metric.Label, Ui(16), Ui(40) + (i * metricRowHeight), metric.Enabled);
+                string group = GetMetricGroupLabel(metric.Key);
+                if (!string.Equals(group, previousMetricGroup, StringComparison.Ordinal))
+                {
+                    metricsCard.Controls.Add(MakeSectionLabel(group, Ui(16), metricY));
+                    metricY += metricGroupHeaderHeight;
+                    previousMetricGroup = group;
+                }
+
+                var check = MakeCheckBox(metric.Label, Ui(16), metricY, metric.Enabled);
                 check.Width = metricsCard.Width - Ui(32);
                 check.CheckedChanged += (_, _) => ApplyLive();
                 _metricChecks[i] = check;
                 metricsCard.Controls.Add(check);
+                metricY += metricRowHeight;
             }
 
             var bottom = new Panel
@@ -377,6 +451,9 @@ namespace HwMonTray
             _config.HotkeyModifiers = _capturedMods == 0 ? _config.HotkeyModifiers : _capturedMods;
             _config.HotkeyVk = _capturedVk == 0 ? _config.HotkeyVk : _capturedVk;
 
+            _config.Enabled = _enabledCheck.Checked;
+            _config.DesktopOverlayEnabled = _desktopOverlayCheck.Checked;
+            _config.RtssOverlayEnabled = _rtssOverlayCheck.Checked;
             _config.Position = (_alignRight, _alignBottom) switch
             {
                 (false, false) => "TopLeft",
@@ -418,6 +495,36 @@ namespace HwMonTray
             _outlineThicknessValue.ForeColor = outlineEnabled ? FgPrimary : Color.FromArgb(95, 100, 110);
         }
 
+        private void UpdateOutputState()
+        {
+            bool enabled = _enabledCheck.Checked;
+            _desktopOverlayCheck.Enabled = enabled;
+            _rtssOverlayCheck.Enabled = enabled;
+            _copyRtssDebugButton.Enabled = enabled && _rtssOverlayCheck.Checked;
+
+            if (!enabled)
+            {
+                _outputStatusBox.Text = "OSD is currently off." + Environment.NewLine + "Enable it here or use the tray toggle/hotkey.";
+                _outputStatusBox.ForeColor = Color.FromArgb(255, 195, 70);
+                return;
+            }
+
+            if (_rtssOverlayCheck.Checked)
+            {
+                var snapshot = RtssOverlayClient.GetStatusSnapshot();
+                _outputStatusBox.Text = snapshot.Status;
+                _outputStatusBox.ForeColor = snapshot.IsProcessRunning && snapshot.HasSharedMemory && snapshot.IsSlotOwned
+                    ? AccentGreen
+                    : Color.FromArgb(255, 195, 70);
+                return;
+            }
+
+            _outputStatusBox.Text = _desktopOverlayCheck.Checked
+                ? "Desktop OSD is enabled."
+                : "No output backend is enabled.";
+            _outputStatusBox.ForeColor = _desktopOverlayCheck.Checked ? AccentGreen : Color.FromArgb(255, 195, 70);
+        }
+
         private Panel MakeCard(Control parent, string title, ref int y, int height, int width, int marginX)
         {
             var card = new Panel
@@ -455,6 +562,50 @@ namespace HwMonTray
                 ForeColor = FgSecondary,
                 Font = new Font("Segoe UI", 9.5f),
                 BackColor = Color.Transparent
+            };
+        }
+
+        private Label MakeSectionLabel(string text, int x, int y)
+        {
+            return new Label
+            {
+                Text = text.ToUpperInvariant(),
+                Location = new Point(x, y),
+                AutoSize = true,
+                ForeColor = Accent,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private Label MakeCaption(string text, int x, int y, int width)
+        {
+            return new Label
+            {
+                Text = text,
+                Location = new Point(x, y),
+                Size = new Size(width, Ui(28)),
+                ForeColor = Color.FromArgb(110, 116, 130),
+                Font = new Font("Segoe UI", 8.25f),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private TextBox MakeReadOnlyDebugBox(Point location, Size size)
+        {
+            return new TextBox
+            {
+                Location = location,
+                Size = size,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = BgInput,
+                ForeColor = FgSecondary,
+                Font = new Font("Consolas", 8.75f),
+                WordWrap = true,
+                TabStop = false
             };
         }
 
@@ -630,6 +781,21 @@ namespace HwMonTray
             return result;
         }
 
+        private static string GetMetricGroupLabel(string key)
+        {
+            if (key.StartsWith("Cpu", StringComparison.OrdinalIgnoreCase))
+            {
+                return "CPU";
+            }
+
+            if (key.StartsWith("Gpu", StringComparison.OrdinalIgnoreCase))
+            {
+                return "GPU";
+            }
+
+            return "System";
+        }
+
         private void RestoreWindowBounds()
         {
             int fixedWidth = FixedWindowWidth();
@@ -671,6 +837,14 @@ namespace HwMonTray
         {
             base.OnShown(e);
             _scrollContainer?.RefreshScrollMetrics();
+            _statusTimer.Start();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _statusTimer.Stop();
+            _statusTimer.Dispose();
+            base.OnFormClosed(e);
         }
 
         private int Ui(int logicalPixels)

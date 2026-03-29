@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -149,33 +150,7 @@ namespace HwMonTray
                 }
             }
 
-            if (!_currentValues.ContainsKey("FanSpeed"))
-            {
-                foreach (var hw in _computer.Hardware)
-                {
-                    foreach (var sub in hw.SubHardware)
-                    {
-                        var fan = sub.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Fan && s.Value.HasValue);
-                        if (fan != null)
-                        {
-                            _currentValues["FanSpeed"] = $"{fan.Value!.Value:0} RPM";
-                            break;
-                        }
-                    }
-
-                    if (_currentValues.ContainsKey("FanSpeed"))
-                    {
-                        break;
-                    }
-
-                    var topFan = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Fan && s.Value.HasValue);
-                    if (topFan != null)
-                    {
-                        _currentValues["FanSpeed"] = $"{topFan.Value!.Value:0} RPM";
-                        break;
-                    }
-                }
-            }
+            CollectFanMetrics();
 
             RecalcSize();
             RepositionOnScreen();
@@ -184,6 +159,30 @@ namespace HwMonTray
             {
                 UpdateOverlay();
             }
+        }
+
+        public string BuildOsdText()
+        {
+            var metrics = GetVisibleMetrics();
+            if (metrics.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder();
+            foreach (var (label, value, _) in metrics)
+            {
+                if (builder.Length > 0)
+                {
+                    builder.AppendLine();
+                }
+
+                builder.Append(label);
+                builder.Append(": ");
+                builder.Append(value);
+            }
+
+            return builder.ToString();
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -325,6 +324,102 @@ namespace HwMonTray
             {
                 _currentValues["RamUsage"] = $"{usedGb:0.#} GB";
             }
+        }
+
+        private void CollectFanMetrics()
+        {
+            ISensor? cpuFan = null;
+            ISensor? gpuFan = null;
+            ISensor? caseFan = null;
+
+            foreach (var hardware in _computer.Hardware)
+            {
+                CollectFanMetricsRecursive(hardware, ref cpuFan, ref gpuFan, ref caseFan);
+            }
+
+            if (cpuFan?.Value.HasValue == true)
+            {
+                _currentValues["CpuFan"] = $"{cpuFan.Value.Value:0} RPM";
+            }
+
+            if (gpuFan?.Value.HasValue == true)
+            {
+                _currentValues["GpuFan"] = $"{gpuFan.Value.Value:0} RPM";
+            }
+
+            if (caseFan?.Value.HasValue == true)
+            {
+                _currentValues["CaseFan"] = $"{caseFan.Value.Value:0} RPM";
+            }
+        }
+
+        private void CollectFanMetricsRecursive(IHardware hardware, ref ISensor? cpuFan, ref ISensor? gpuFan, ref ISensor? caseFan)
+        {
+            foreach (var sensor in hardware.Sensors.Where(s => s.SensorType == SensorType.Fan && s.Value.HasValue))
+            {
+                AssignFanSensor(hardware, sensor, ref cpuFan, ref gpuFan, ref caseFan);
+            }
+
+            foreach (var subHardware in hardware.SubHardware)
+            {
+                CollectFanMetricsRecursive(subHardware, ref cpuFan, ref gpuFan, ref caseFan);
+            }
+        }
+
+        private void AssignFanSensor(IHardware hardware, ISensor sensor, ref ISensor? cpuFan, ref ISensor? gpuFan, ref ISensor? caseFan)
+        {
+            FanRole role = ClassifyFanSensor(hardware, sensor);
+            switch (role)
+            {
+                case FanRole.Cpu when cpuFan == null:
+                    cpuFan = sensor;
+                    break;
+                case FanRole.Gpu when gpuFan == null:
+                    gpuFan = sensor;
+                    break;
+                case FanRole.Case when caseFan == null:
+                    caseFan = sensor;
+                    break;
+            }
+        }
+
+        private FanRole ClassifyFanSensor(IHardware hardware, ISensor sensor)
+        {
+            string sensorName = sensor.Name ?? string.Empty;
+            string hardwareName = hardware.Name ?? string.Empty;
+            string parentName = hardware.Parent?.Name ?? string.Empty;
+            string combined = $"{sensorName} {hardwareName} {parentName}".ToLowerInvariant();
+
+            if (hardware.HardwareType is HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel ||
+                combined.Contains("gpu") || combined.Contains("geforce") || combined.Contains("radeon"))
+            {
+                return FanRole.Gpu;
+            }
+
+            if (sensorName.Contains("CPU", StringComparison.OrdinalIgnoreCase) ||
+                sensorName.Contains("Processor", StringComparison.OrdinalIgnoreCase) ||
+                hardware.HardwareType == HardwareType.Cpu)
+            {
+                return FanRole.Cpu;
+            }
+
+            if (combined.Contains("chassis") ||
+                combined.Contains("case") ||
+                combined.Contains("system fan") ||
+                combined.Contains("sys fan") ||
+                combined.Contains("aux fan") ||
+                combined.Contains("rear fan") ||
+                combined.Contains("front fan"))
+            {
+                return FanRole.Case;
+            }
+
+            if (hardware.HardwareType is HardwareType.Motherboard or HardwareType.SuperIO or HardwareType.EmbeddedController)
+            {
+                return FanRole.Case;
+            }
+
+            return FanRole.Unknown;
         }
 
         private List<(string label, string value, string key)> GetVisibleMetrics()
@@ -684,6 +779,14 @@ namespace HwMonTray
             }
 
             base.Dispose(disposing);
+        }
+
+        private enum FanRole
+        {
+            Unknown,
+            Cpu,
+            Gpu,
+            Case
         }
     }
 }

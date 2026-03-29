@@ -35,6 +35,7 @@ namespace HwMonTray
         private static OverlayForm? overlayForm;
         private static OverlayConfig overlayConfig = null!;
         private static HotkeyWindow? hotkeyWindow;
+        private static RtssOverlayClient? rtssOverlayClient;
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -102,6 +103,7 @@ namespace HwMonTray
 
             // Create overlay (hidden by default)
             overlayForm = new OverlayForm(computer, overlayConfig);
+            rtssOverlayClient = new RtssOverlayClient();
 
             // Register global hotkey
             hotkeyWindow = new HotkeyWindow();
@@ -109,6 +111,7 @@ namespace HwMonTray
             RegisterCurrentHotkey();
 
             UpdateData();
+            ApplyOverlayOutputs();
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 2000;
@@ -178,18 +181,9 @@ namespace HwMonTray
                 overlayForm = new OverlayForm(computer, overlayConfig);
             }
 
-            if (overlayForm.Visible)
-            {
-                overlayForm.Hide();
-                overlayConfig.Enabled = false;
-            }
-            else
-            {
-                overlayForm.Show();
-                overlayForm.RefreshData();
-                overlayConfig.Enabled = true;
-            }
+            overlayConfig.Enabled = !overlayConfig.Enabled;
 
+            ApplyOverlayOutputs();
             SaveOverlayConfig(overlayConfig);
         }
 
@@ -212,6 +206,7 @@ namespace HwMonTray
                 overlayForm.UpdateConfig(config);
             }
 
+            ApplyOverlayOutputs();
             SaveOverlayConfig(config);
 
             // Refresh context menu to show new hotkey
@@ -246,17 +241,23 @@ namespace HwMonTray
                     string json = File.ReadAllText(ConfigPath);
                     var cfg = JsonSerializer.Deserialize<AppConfigFull>(json);
                     if (cfg?.Overlay != null)
+                    {
+                        cfg.Overlay.NormalizeMetrics();
                         return cfg.Overlay;
+                    }
                 }
             }
             catch { }
-            return new OverlayConfig();
+            var overlay = new OverlayConfig();
+            overlay.NormalizeMetrics();
+            return overlay;
         }
 
         internal static void SaveOverlayConfig(OverlayConfig overlay)
         {
             try
             {
+                overlay.NormalizeMetrics();
                 AppConfigFull cfg;
                 if (File.Exists(ConfigPath))
                 {
@@ -362,6 +363,7 @@ namespace HwMonTray
 
             // Refresh overlay if visible
             overlayForm?.RefreshData();
+            SyncRtssOverlay();
         }
 
         private static void UpdateIcon()
@@ -515,6 +517,9 @@ namespace HwMonTray
                 overlayForm.Dispose();
             }
 
+             rtssOverlayClient?.Release();
+             rtssOverlayClient?.Dispose();
+
             if (cpuTrayIcon != null)
             {
                 cpuTrayIcon.Visible = false;
@@ -528,6 +533,65 @@ namespace HwMonTray
             if (computer != null)
             {
                 computer.Close();
+            }
+        }
+
+        private static void ApplyOverlayOutputs()
+        {
+            if (overlayForm == null || overlayForm.IsDisposed)
+            {
+                overlayForm = new OverlayForm(computer, overlayConfig);
+            }
+
+            if (rtssOverlayClient == null)
+            {
+                rtssOverlayClient = new RtssOverlayClient();
+            }
+
+            if (overlayConfig.Enabled && overlayConfig.DesktopOverlayEnabled)
+            {
+                if (!overlayForm.Visible)
+                {
+                    overlayForm.Show();
+                }
+
+                overlayForm.RefreshData();
+            }
+            else if (overlayForm.Visible)
+            {
+                overlayForm.Hide();
+            }
+
+            if (overlayConfig.Enabled && overlayConfig.RtssOverlayEnabled)
+            {
+                SyncRtssOverlay();
+            }
+            else
+            {
+                rtssOverlayClient.Release();
+            }
+        }
+
+        private static void SyncRtssOverlay()
+        {
+            if (rtssOverlayClient == null || !overlayConfig.Enabled || !overlayConfig.RtssOverlayEnabled)
+            {
+                return;
+            }
+
+            if (overlayForm == null || overlayForm.IsDisposed)
+            {
+                return;
+            }
+
+            string text = overlayForm.BuildOsdText();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                rtssOverlayClient.Release();
+            }
+            else
+            {
+                rtssOverlayClient.Update(text);
             }
         }
     }
