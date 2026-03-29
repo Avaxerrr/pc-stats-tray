@@ -1,0 +1,173 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore .\PCStatsTray.sln
+
+      - name: Build
+        run: dotnet build .\PCStatsTray.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test .\PCStatsTray.Tests\PCStatsTray.Tests.csproj -c Release --no-build --verbosity normal
+
+  package:
+    name: Package Windows executable
+    runs-on: windows-latest
+    needs: build-test
+    outputs:
+      asset_name: ${{ steps.package.outputs.asset_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish single-file executable
+        run: >
+          dotnet publish .\PCStatsTray\PCStatsTray.csproj
+          -c Release
+          -r win-x64
+          -p:PublishSingleFile=true
+          -p:SelfContained=false
+
+      - name: Prepare packaged executable
+        id: package
+        shell: pwsh
+        run: |
+          $publishExe = Join-Path $env:GITHUB_WORKSPACE 'PCStatsTray\bin\Release\net10.0-windows\win-x64\publish\PCStatsTray.exe'
+          $artifactDir = Join-Path $env:RUNNER_TEMP 'pcstats-release'
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $label = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { "sha-$($env:GITHUB_SHA.Substring(0, 7))" }
+          $assetName = "PCStatsTray_${label}_win-x64.exe"
+          $assetPath = Join-Path $artifactDir $assetName
+
+          Copy-Item $publishExe $assetPath -Force
+
+          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload packaged executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.asset_name }}
+          path: ${{ runner.temp }}\pcstats-release\${{ steps.package.outputs.asset_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create GitHub release
+    runs-on: windows-latest
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged executable
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.asset_name }}
+          path: ${{ runner.temp }}\release
+
+      - name: Create or update release
+        uses: actions/github-script@v8
+        env:
+          ASSET_NAME: ${{ needs.package.outputs.asset_name }}
+          ASSET_PATH: ${{ runner.temp }}\release\${{ needs.package.outputs.asset_name }}
+        with:
+          script: |
+            const fs = require('fs')
+            const tag = context.ref.replace('refs/tags/', '')
+            const assetName = process.env.ASSET_NAME
+            const assetPath = process.env.ASSET_PATH
+
+            let release
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag
+              })
+              release = existing.data
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error
+              }
+
+              const created = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                name: `PC Stats Tray ${tag}`,
+                draft: false,
+                prerelease: false,
+                generate_release_notes: true,
+                body: [
+                  'Windows x64 single-file build.',
+                  '',
+                  'Requirements:',
+                  '- Install the .NET 10 Desktop Runtime before running the app.',
+                  '- Install RTSS only if you want the in-game overlay.'
+                ].join('\n')
+              })
+              release = created.data
+            }
+
+            const assets = await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id
+            })
+
+            const existingAsset = assets.data.find(asset => asset.name === assetName)
+            if (existingAsset) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: existingAsset.id
+              })
+            }
+
+            const assetStat = fs.statSync(assetPath)
+
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              name: assetName,
+              headers: {
+                'content-type': 'application/vnd.microsoft.portable-executable',
+                'content-length': assetStat.size
+              },
+              data: fs.readFileSync(assetPath)
+            })
