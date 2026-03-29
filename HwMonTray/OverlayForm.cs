@@ -130,26 +130,10 @@ namespace HwMonTray
         public void RefreshData()
         {
             _currentValues.Clear();
-
-            foreach (var hw in _computer.Hardware)
+            foreach (var pair in OverlayMetricCollector.Collect(_computer, _config))
             {
-                if (hw.HardwareType == HardwareType.Cpu)
-                {
-                    CollectCpuMetrics(hw);
-                }
-                else if (hw.HardwareType == HardwareType.GpuNvidia ||
-                         hw.HardwareType == HardwareType.GpuAmd ||
-                         hw.HardwareType == HardwareType.GpuIntel)
-                {
-                    CollectGpuMetrics(hw);
-                }
-                else if (hw.HardwareType == HardwareType.Memory)
-                {
-                    CollectRamMetrics(hw);
-                }
+                _currentValues[pair.Key] = pair.Value;
             }
-
-            FanSensorResolver.PopulateFanMetrics(_computer, _config, _currentValues);
 
             RecalcSize();
             RepositionOnScreen();
@@ -195,114 +179,6 @@ namespace HwMonTray
                     ApplyConfig();
                     RefreshData();
                 }));
-            }
-        }
-
-        private void CollectCpuMetrics(IHardware hw)
-        {
-            var temp = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && s.Name.Contains("Core Max"))
-                    ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && s.Name.Contains("Package"))
-                    ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-            if (temp?.Value.HasValue == true)
-            {
-                _currentValues["CpuTemp"] = $"{temp.Value.Value:0}\u00B0C";
-            }
-
-            var load = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Load && s.Name.Contains("Total"))
-                    ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Load);
-            if (load?.Value.HasValue == true)
-            {
-                _currentValues["CpuLoad"] = $"{load.Value.Value:0}%";
-            }
-
-            var clocks = hw.Sensors.Where(s => s.SensorType == SensorType.Clock && s.Value.HasValue && s.Name.Contains("Core")).ToList();
-            if (clocks.Count > 0)
-            {
-                _currentValues["CpuClock"] = $"{clocks.Max(s => s.Value!.Value):0} MHz";
-            }
-
-            var power = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Power && s.Name.Contains("Package"))
-                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Power);
-            if (power?.Value.HasValue == true)
-            {
-                _currentValues["CpuPower"] = $"{power.Value.Value:0.#} W";
-            }
-        }
-
-        private void CollectGpuMetrics(IHardware hw)
-        {
-            var temp = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && s.Name.Contains("Core"))
-                    ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-            if (temp?.Value.HasValue == true)
-            {
-                _currentValues["GpuTemp"] = $"{temp.Value.Value:0}\u00B0C";
-            }
-
-            var load = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Load && s.Name.Contains("Core"))
-                    ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Load);
-            if (load?.Value.HasValue == true)
-            {
-                _currentValues["GpuLoad"] = $"{load.Value.Value:0}%";
-            }
-
-            var clock = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Clock && s.Name.Contains("Core"))
-                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Clock);
-            if (clock?.Value.HasValue == true)
-            {
-                _currentValues["GpuClock"] = $"{clock.Value.Value:0} MHz";
-            }
-
-            var vramUsed = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.SmallData && s.Name.Contains("Memory Used"))
-                        ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.SmallData && s.Name.Contains("GPU Memory Used"));
-            var vramTotal = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.SmallData && s.Name.Contains("Memory Total"))
-                         ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.SmallData && s.Name.Contains("GPU Memory Total"));
-            if (vramUsed?.Value.HasValue == true)
-            {
-                float usedMb = vramUsed.Value.Value;
-                if (vramTotal?.Value.HasValue == true)
-                {
-                    float totalMb = vramTotal.Value.Value;
-                    _currentValues["GpuVram"] = $"{usedMb / 1024:0.#} / {totalMb / 1024:0.#} GB";
-                }
-                else
-                {
-                    _currentValues["GpuVram"] = $"{usedMb / 1024:0.#} GB";
-                }
-            }
-
-            var power = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Power);
-            if (power?.Value.HasValue == true)
-            {
-                _currentValues["GpuPower"] = $"{power.Value.Value:0.#} W";
-            }
-        }
-
-        private void CollectRamMetrics(IHardware hw)
-        {
-            var used = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Data && s.Name.Contains("Used"));
-            var avail = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Data && s.Name.Contains("Available"));
-            if (used?.Value.HasValue != true)
-            {
-                return;
-            }
-
-            float usedGb = used.Value!.Value;
-            if (avail?.Value.HasValue == true)
-            {
-                float totalGb = usedGb + avail.Value!.Value;
-                if (_config.ShowRamAsPercentage())
-                {
-                    float usedPercent = totalGb > 0 ? (usedGb / totalGb) * 100f : 0f;
-                    _currentValues["RamUsage"] = $"{usedPercent:0}%";
-                }
-                else
-                {
-                    _currentValues["RamUsage"] = $"{usedGb:0.#} / {totalGb:0.#} GB";
-                }
-            }
-            else
-            {
-                _currentValues["RamUsage"] = $"{usedGb:0.#} GB";
             }
         }
 
