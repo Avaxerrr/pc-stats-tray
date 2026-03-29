@@ -33,7 +33,9 @@ namespace HwMonTray
         private const int ExtendedTextCapacity = 4096;
         private const int ExtendedText2Capacity = 32768;
         private const string OwnerId = "HwMonTray";
-        private static readonly Encoding RtssTextEncoding = Encoding.Default;
+        // RTSS expects a stable single-byte text payload. Using the OS default code page
+        // can garble symbols like the degree sign on non-Western Windows locales.
+        private static readonly Encoding RtssTextEncoding = Encoding.Latin1;
         private static readonly object StatusLock = new();
         private static bool _lastPushSucceeded;
         private static string _lastPushStatus = "No RTSS push attempt yet.";

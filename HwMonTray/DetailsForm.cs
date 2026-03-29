@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
 
@@ -17,7 +15,6 @@ namespace HwMonTray
         private DataGridView _grid = null!;
         private HashSet<string> _hiddenSensors;
         private IHardware? _selectedHardware;
-        private static string ConfigPath => Program.ConfigPath;
 
         // Dark theme colors
         private static readonly Color BgDark = Color.FromArgb(20, 20, 20);
@@ -480,40 +477,12 @@ namespace HwMonTray
 
         private static HashSet<string> LoadConfig()
         {
-            try
-            {
-                if (File.Exists(ConfigPath))
-                {
-                    string json = File.ReadAllText(ConfigPath);
-                    var cfg = JsonSerializer.Deserialize<Program.AppConfigFull>(json);
-                    return cfg?.HiddenSensors != null
-                        ? new HashSet<string>(cfg.HiddenSensors)
-                        : new HashSet<string>();
-                }
-            }
-            catch { }
-            return new HashSet<string>();
+            return AppConfigStore.LoadHiddenSensors(AppConfigStore.DefaultPath);
         }
 
         private static void SaveConfig(HashSet<string> hidden)
         {
-            try
-            {
-                Program.AppConfigFull cfg;
-                if (File.Exists(ConfigPath))
-                {
-                    string existing = File.ReadAllText(ConfigPath);
-                    cfg = JsonSerializer.Deserialize<Program.AppConfigFull>(existing) ?? new Program.AppConfigFull();
-                }
-                else
-                {
-                    cfg = new Program.AppConfigFull();
-                }
-                cfg.HiddenSensors = hidden.ToList();
-                string json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(ConfigPath, json);
-            }
-            catch { }
+            AppConfigStore.SaveHiddenSensors(AppConfigStore.DefaultPath, hidden);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

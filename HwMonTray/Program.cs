@@ -1,9 +1,6 @@
 using System;
 using System.Drawing;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
@@ -24,6 +21,9 @@ namespace HwMonTray
 
     static class Program
     {
+        private const int SM_CXSMICON = 49;
+        private const int SM_CYSMICON = 50;
+
         private static NotifyIcon cpuTrayIcon = null!;
         private static NotifyIcon gpuTrayIcon = null!;
         private static Computer computer = null!;
@@ -35,7 +35,7 @@ namespace HwMonTray
         // OSD Overlay
         private static OverlayForm? overlayForm;
         private static OverlayConfig overlayConfig = null!;
-        private static HotkeyWindow? hotkeyWindow;
+        private static GlobalHotkeyService? hotkeyService;
         private static RtssOverlayClient? rtssOverlayClient;
         private static ToolStripMenuItem? rtssStatusItem;
 
@@ -49,10 +49,6 @@ namespace HwMonTray
         private static float gpuMaxTemp = float.MinValue;
         private static double gpuSumTemp = 0;
         private static long gpuTempCount = 0;
-
-        // Config path (shared with DetailsForm)
-        internal static readonly string ConfigPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "hwmon_config.json");
 
         [STAThread]
         static void Main()
@@ -84,7 +80,7 @@ namespace HwMonTray
             }
 
             // Load overlay config
-            overlayConfig = LoadOverlayConfig();
+            overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
             contextMenu = new ContextMenuStrip();
             PopulateInitialMenu();
@@ -107,10 +103,10 @@ namespace HwMonTray
             overlayForm = new OverlayForm(computer, overlayConfig);
             rtssOverlayClient = new RtssOverlayClient();
 
-            // Register global hotkey
-            hotkeyWindow = new HotkeyWindow();
-            hotkeyWindow.HotkeyPressed += OnHotkeyPressed;
-            RegisterCurrentHotkey();
+            // Register global hotkeys
+            hotkeyService = new GlobalHotkeyService();
+            hotkeyService.HotkeyPressed += OnHotkeyPressed;
+            hotkeyService.ApplyConfig(overlayConfig);
 
             UpdateData();
             ApplyOverlayOutputs();
@@ -165,11 +161,11 @@ namespace HwMonTray
             contextMenu.Items.Add(new ToolStripSeparator());
 
             var startupItem = new ToolStripMenuItem("Run at Startup");
-            startupItem.Checked = IsStartupTaskConfigured();
+            startupItem.Checked = StartupTaskService.IsConfigured();
             startupItem.Click += (s, e) => 
             {
                 ToggleStartup();
-                startupItem.Checked = IsStartupTaskConfigured();
+                startupItem.Checked = StartupTaskService.IsConfigured();
             };
             contextMenu.Items.Add(startupItem);
 
@@ -189,7 +185,7 @@ namespace HwMonTray
             overlayConfig.Enabled = !overlayConfig.Enabled;
 
             ApplyOverlayOutputs();
-            SaveOverlayConfig(overlayConfig);
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
         }
 
         private static void OnHotkeyPressed(int hotkeyId)
@@ -208,10 +204,7 @@ namespace HwMonTray
         private static void OnOverlayConfigSaved(OverlayConfig config)
         {
             overlayConfig = config;
-
-            // Re-register hotkey with new combo
-            UnregisterCurrentHotkey();
-            RegisterCurrentHotkey();
+            hotkeyService?.ApplyConfig(config);
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -220,147 +213,22 @@ namespace HwMonTray
             }
 
             ApplyOverlayOutputs();
-            SaveOverlayConfig(config);
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, config);
 
             // Refresh context menu to show new hotkey
             PopulateInitialMenu();
         }
 
-        private static void RegisterCurrentHotkey()
-        {
-            if (hotkeyWindow != null && overlayConfig.HotkeyVk != 0)
-            {
-                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 1,
-                    (uint)overlayConfig.HotkeyModifiers, (uint)overlayConfig.HotkeyVk);
-            }
-
-            if (hotkeyWindow != null && overlayConfig.SettingsHotkeyVk != 0)
-            {
-                HotkeyWindow.RegisterHotKey(hotkeyWindow.Handle, 2,
-                    (uint)overlayConfig.SettingsHotkeyModifiers, (uint)overlayConfig.SettingsHotkeyVk);
-            }
-        }
-
-        private static void UnregisterCurrentHotkey()
-        {
-            if (hotkeyWindow != null)
-            {
-                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 1);
-                HotkeyWindow.UnregisterHotKey(hotkeyWindow.Handle, 2);
-            }
-        }
 
         // ── Overlay Config Persistence ───────────────────────────────
 
-        private static OverlayConfig LoadOverlayConfig()
-        {
-            try
-            {
-                if (File.Exists(ConfigPath))
-                {
-                    string json = File.ReadAllText(ConfigPath);
-                    var cfg = JsonSerializer.Deserialize<AppConfigFull>(json);
-                    if (cfg?.Overlay != null)
-                    {
-                        cfg.Overlay.NormalizeMetrics();
-                        return cfg.Overlay;
-                    }
-                }
-            }
-            catch { }
-            var overlay = new OverlayConfig();
-            overlay.NormalizeMetrics();
-            return overlay;
-        }
-
-        internal static void SaveOverlayConfig(OverlayConfig overlay)
-        {
-            try
-            {
-                overlay.NormalizeMetrics();
-                AppConfigFull cfg;
-                if (File.Exists(ConfigPath))
-                {
-                    string existing = File.ReadAllText(ConfigPath);
-                    cfg = JsonSerializer.Deserialize<AppConfigFull>(existing) ?? new AppConfigFull();
-                }
-                else
-                {
-                    cfg = new AppConfigFull();
-                }
-
-                cfg.Overlay = overlay;
-                string json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(ConfigPath, json);
-            }
-            catch { }
-        }
-
-        /// <summary>
-        /// Full config model that includes both sensor filter settings and overlay settings.
-        /// </summary>
-        internal class AppConfigFull
-        {
-            public List<string> HiddenSensors { get; set; } = new();
-            public OverlayConfig? Overlay { get; set; }
-        }
-
         // ── Hotkey Window ────────────────────────────────────────────
-
-        private const string TaskName = "HwMonTray_Startup";
-
-        private static bool IsStartupTaskConfigured()
-        {
-            try
-            {
-                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
-                dynamic ts = Activator.CreateInstance(type)!;
-                ts.Connect();
-                dynamic folder = ts.GetFolder("\\");
-                var task = folder.GetTask(TaskName);
-                return task != null;
-            }
-            catch { return false; }
-        }
 
         private static void ToggleStartup()
         {
             try
             {
-                Type type = Type.GetTypeFromProgID("Schedule.Service")!;
-                dynamic ts = Activator.CreateInstance(type)!;
-                ts.Connect();
-                dynamic folder = ts.GetFolder("\\");
-
-                if (IsStartupTaskConfigured())
-                {
-                    folder.DeleteTask(TaskName, 0);
-                }
-                else
-                {
-                    dynamic taskDef = ts.NewTask(0);
-                    taskDef.RegistrationInfo.Description = "Hardware Monitor Tray Icon Startup";
-                    
-                    // Trigger: Logon (type 9)
-                    dynamic trigger = taskDef.Triggers.Create(9);
-                    
-                    // Action: Run exe (type 0)
-                    dynamic action = taskDef.Actions.Create(0);
-                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? Application.ExecutablePath;
-                    action.Path = exePath;
-                    action.WorkingDirectory = Path.GetDirectoryName(exePath);
-
-                    // Run with highest privileges (bypasses UAC on boot)
-                    taskDef.Principal.RunLevel = 1;
-
-                    // Critical for laptops: allow running on battery
-                    taskDef.Settings.DisallowStartIfOnBatteries = false;
-                    taskDef.Settings.StopIfGoingOnBatteries = false;
-                    taskDef.Settings.ExecutionTimeLimit = "PT0S"; // No time limit
-
-                    // Register: CreateOrUpdate (6), InteractiveToken (3)
-                    folder.RegisterTaskDefinition(TaskName, taskDef, 6, null, null, 3, null);
-                }
+                StartupTaskService.Toggle();
             }
             catch (Exception ex)
             {
@@ -438,8 +306,8 @@ namespace HwMonTray
             if (gpuTrayText.Length >= 64) gpuTrayText = gpuTrayText.Substring(0, 63);
             gpuTrayIcon.Text = gpuTrayText;
 
-            SetTrayIcon(cpuTrayIcon, maxCpuTemp, "CPU");
-            SetTrayIcon(gpuTrayIcon, maxGpuTemp, "GPU");
+            SetSmoothedTrayIcon(cpuTrayIcon, maxCpuTemp);
+            SetSmoothedTrayIcon(gpuTrayIcon, maxGpuTemp);
         }
 
         private static Color TextColor(float temp)
@@ -511,6 +379,110 @@ namespace HwMonTray
             bmp.Dispose();
         }
 
+        private static void SetSmoothedTrayIcon(NotifyIcon icon, float temp)
+        {
+            int iconSize = GetTrayIconSize();
+            using Bitmap bmp = RenderTrayIconBitmap(temp, iconSize);
+
+            IntPtr hIcon = bmp.GetHicon();
+            Icon newIcon = Icon.FromHandle(hIcon);
+            var oldIcon = icon.Icon;
+            icon.Icon = newIcon;
+
+            if (oldIcon != null)
+            {
+                DestroyIcon(oldIcon.Handle);
+                oldIcon.Dispose();
+            }
+        }
+
+        private static Bitmap RenderTrayIconBitmap(float temp, int iconSize)
+        {
+            const int supersampleScale = 4;
+            int canvasSize = iconSize * supersampleScale;
+
+            using var largeBmp = new Bitmap(canvasSize, canvasSize, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(largeBmp))
+            {
+                ConfigureTrayGraphics(g);
+
+                string tempText = temp > 0 ? $"{temp:0}" : "--";
+                using var textPath = CreateMaximizedTrayTextPath(tempText, canvasSize * 0.92f, canvasSize);
+                using var backgroundPath = CreateTrayBackgroundPath(textPath, canvasSize);
+                using var backgroundBrush = new SolidBrush(Color.FromArgb(30, 30, 30));
+                using var textBrush = new SolidBrush(TextColor(temp));
+                g.FillPath(backgroundBrush, backgroundPath);
+                g.FillPath(textBrush, textPath);
+            }
+
+            var finalBmp = new Bitmap(iconSize, iconSize, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(finalBmp))
+            {
+                ConfigureTrayGraphics(g);
+                g.DrawImage(largeBmp, new Rectangle(0, 0, iconSize, iconSize), new Rectangle(0, 0, canvasSize, canvasSize), GraphicsUnit.Pixel);
+            }
+
+            return finalBmp;
+        }
+
+        private static void ConfigureTrayGraphics(Graphics graphics)
+        {
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.Clear(Color.Transparent);
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath CreateMaximizedTrayTextPath(string text, float targetSize, int canvasSize)
+        {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            using var fontFamily = new FontFamily("Segoe UI");
+            using var format = StringFormat.GenericTypographic;
+            path.AddString(text, fontFamily, (int)FontStyle.Bold, canvasSize, Point.Empty, format);
+
+            RectangleF bounds = path.GetBounds();
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return path;
+            }
+
+            float scale = Math.Min(targetSize / bounds.Width, targetSize / bounds.Height);
+            float finalWidth = bounds.Width * scale;
+            float finalHeight = bounds.Height * scale;
+            float offsetX = (canvasSize - finalWidth) / 2f;
+            float offsetY = (canvasSize - finalHeight) / 2f;
+
+            using var transform = new System.Drawing.Drawing2D.Matrix();
+            transform.Translate(-bounds.X, -bounds.Y, System.Drawing.Drawing2D.MatrixOrder.Append);
+            transform.Scale(scale, scale, System.Drawing.Drawing2D.MatrixOrder.Append);
+            transform.Translate(offsetX, offsetY, System.Drawing.Drawing2D.MatrixOrder.Append);
+            path.Transform(transform);
+            return path;
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath CreateTrayBackgroundPath(System.Drawing.Drawing2D.GraphicsPath textPath, int canvasSize)
+        {
+            RectangleF textBounds = textPath.GetBounds();
+            float padX = canvasSize * 0.04f;
+            float padY = canvasSize * 0.07f;
+            float x = Math.Max(0, textBounds.X - padX);
+            float y = Math.Max(0, textBounds.Y - padY);
+            float width = Math.Min(canvasSize - x, textBounds.Width + (padX * 2f));
+            float height = Math.Min(canvasSize - y, textBounds.Height + (padY * 2f));
+            float radius = Math.Max(canvasSize * 0.14f, 6f);
+
+            return RoundedRect(Rectangle.Round(new RectangleF(x, y, width, height)), (int)Math.Round(radius));
+        }
+
+        private static int GetTrayIconSize()
+        {
+            int width = GetSystemMetrics(SM_CXSMICON);
+            int height = GetSystemMetrics(SM_CYSMICON);
+            int size = Math.Max(Math.Max(width, height), 16);
+            return Math.Min(size, 64);
+        }
+
 
         private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle bounds, int radius)
         {
@@ -527,10 +499,12 @@ namespace HwMonTray
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         extern static bool DestroyIcon(IntPtr handle);
 
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+
         private static void CleanUp()
         {
-            UnregisterCurrentHotkey();
-            hotkeyWindow?.DestroyHandle();
+            hotkeyService?.Dispose();
 
             if (overlayForm != null && !overlayForm.IsDisposed)
             {
@@ -679,36 +653,6 @@ namespace HwMonTray
             }
 
             rtssStatusItem.Text = "RTSS: ready";
-        }
-    }
-
-    /// <summary>
-    /// Invisible NativeWindow that listens for WM_HOTKEY messages.
-    /// </summary>
-    internal class HotkeyWindow : NativeWindow
-    {
-        private const int WM_HOTKEY = 0x0312;
-
-        public event Action<int>? HotkeyPressed;
-
-        [DllImport("user32.dll")]
-        public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        [DllImport("user32.dll")]
-        public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        public HotkeyWindow()
-        {
-            CreateHandle(new CreateParams());
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == WM_HOTKEY)
-            {
-                HotkeyPressed?.Invoke(m.WParam.ToInt32());
-            }
-            base.WndProc(ref m);
         }
     }
 }

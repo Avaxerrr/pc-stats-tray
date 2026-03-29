@@ -1,0 +1,83 @@
+using System;
+
+namespace HwMonTray
+{
+    internal sealed class OverlaySettingsState
+    {
+        public HotkeyBinding ToggleHotkey { get; init; }
+        public HotkeyBinding SettingsHotkey { get; init; }
+        public bool Enabled { get; init; }
+        public bool DesktopOverlayEnabled { get; init; }
+        public bool RtssOverlayEnabled { get; init; }
+        public bool AlignRight { get; init; }
+        public bool AlignBottom { get; init; }
+        public int OffsetX { get; init; }
+        public int OffsetY { get; init; }
+        public int OpacityPercent { get; init; }
+        public int FontSize { get; init; }
+        public string FontFamily { get; init; } = string.Empty;
+        public bool HasBackground { get; init; }
+        public bool ShowTextShadow { get; init; }
+        public bool ShowBorder { get; init; }
+        public bool ShowTextOutline { get; init; }
+        public int TextOutlineThickness { get; init; }
+        public bool ShowRamAsPercentage { get; init; }
+        public string CpuFanSensorKey { get; init; } = string.Empty;
+        public string GpuFanSensorKey { get; init; } = string.Empty;
+        public string CaseFanSensorKey { get; init; } = string.Empty;
+        public bool[] MetricEnabledStates { get; init; } = Array.Empty<bool>();
+    }
+
+    internal static class OverlaySettingsConfigMapper
+    {
+        public static void Apply(OverlayConfig config, OverlaySettingsState state)
+        {
+            if (!state.ToggleHotkey.IsEmpty)
+            {
+                config.HotkeyDisplay = state.ToggleHotkey.Display;
+                config.HotkeyModifiers = state.ToggleHotkey.Modifiers;
+                config.HotkeyVk = state.ToggleHotkey.VirtualKey;
+            }
+
+            if (!state.SettingsHotkey.IsEmpty)
+            {
+                config.SettingsHotkeyDisplay = state.SettingsHotkey.Display;
+                config.SettingsHotkeyModifiers = state.SettingsHotkey.Modifiers;
+                config.SettingsHotkeyVk = state.SettingsHotkey.VirtualKey;
+            }
+
+            config.Enabled = state.Enabled;
+            config.DesktopOverlayEnabled = state.DesktopOverlayEnabled;
+            config.RtssOverlayEnabled = state.RtssOverlayEnabled;
+            config.Position = (state.AlignRight, state.AlignBottom) switch
+            {
+                (false, false) => "TopLeft",
+                (true, false) => "TopRight",
+                (false, true) => "BottomLeft",
+                (true, true) => "BottomRight"
+            };
+
+            config.OffsetX = state.OffsetX;
+            config.OffsetY = state.OffsetY;
+            config.Opacity = state.OpacityPercent / 100f;
+            config.FontSize = state.FontSize;
+            config.FontFamily = string.IsNullOrWhiteSpace(state.FontFamily) ? config.FontFamily : state.FontFamily;
+            config.BackgroundMode = state.HasBackground ? OverlayConfig.BackgroundSolid : OverlayConfig.BackgroundNone;
+            config.ShowTextShadow = state.ShowTextShadow;
+            config.ShowBorder = state.ShowBorder;
+            config.ShowTextOutline = state.ShowTextOutline;
+            config.TextOutlineThickness = state.TextOutlineThickness;
+            config.RamDisplayMode = state.ShowRamAsPercentage
+                ? OverlayConfig.RamDisplayPercentage
+                : OverlayConfig.RamDisplayUsedAndTotal;
+            config.CpuFanSensorKey = state.CpuFanSensorKey;
+            config.GpuFanSensorKey = state.GpuFanSensorKey;
+            config.CaseFanSensorKey = state.CaseFanSensorKey;
+
+            for (int i = 0; i < state.MetricEnabledStates.Length && i < config.Metrics.Count; i++)
+            {
+                config.Metrics[i].Enabled = state.MetricEnabledStates[i];
+            }
+        }
+    }
+}
