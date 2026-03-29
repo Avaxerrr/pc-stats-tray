@@ -42,6 +42,7 @@ jobs:
     needs: build-test
     outputs:
       asset_name: ${{ steps.package.outputs.asset_name }}
+      version_label: ${{ steps.package.outputs.version_label }}
 
     steps:
       - name: Checkout repository
@@ -64,17 +65,24 @@ jobs:
         id: package
         shell: pwsh
         run: |
+          [xml]$project = Get-Content (Join-Path $env:GITHUB_WORKSPACE 'PCStatsTray\PCStatsTray.csproj')
+          $projectVersion = $project.Project.PropertyGroup.Version | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($projectVersion)) {
+            throw 'Could not read app version from PCStatsTray.csproj.'
+          }
+
           $publishExe = Join-Path $env:GITHUB_WORKSPACE 'PCStatsTray\bin\Release\net10.0-windows\win-x64\publish\PCStatsTray.exe'
           $artifactDir = Join-Path $env:RUNNER_TEMP 'pcstats-release'
           New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-          $label = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { "sha-$($env:GITHUB_SHA.Substring(0, 7))" }
+          $label = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { "v$projectVersion" }
           $assetName = "PCStatsTray_${label}_win-x64.exe"
           $assetPath = Join-Path $artifactDir $assetName
 
           Copy-Item $publishExe $assetPath -Force
 
           "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "version_label=$label" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload packaged executable
         uses: actions/upload-artifact@v4
