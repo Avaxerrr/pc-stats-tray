@@ -9,7 +9,16 @@ namespace PCStatsTray
 {
     public class DetailsForm : Form
     {
+        private const int DefaultWindowWidth = 820;
+        private const int DefaultWindowHeight = 560;
+        private const int MinimumWindowWidth = 600;
+        private const int MinimumWindowHeight = 350;
+        private const int DefaultSidebarWidth = 200;
+        private const int MinimumSidebarWidth = 140;
+        private const int MaximumSidebarWidth = 500;
+
         private readonly Computer _computer;
+        private Panel _sidePanel = null!;
         private TreeView _tree = null!;
         private DataGridView _grid = null!;
         private HashSet<string> _hiddenSensors;
@@ -33,8 +42,8 @@ namespace PCStatsTray
 
             var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "Unknown";
             Text = $"PC Stats Tray - Sensor Details (v{version})";
-            Size = new Size(820, 560);
-            MinimumSize = new Size(600, 350);
+            Size = new Size(DefaultWindowWidth, DefaultWindowHeight);
+            MinimumSize = new Size(MinimumWindowWidth, MinimumWindowHeight);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgDark;
             ForeColor = FgText;
@@ -45,6 +54,16 @@ namespace PCStatsTray
             TopMost = true;
 
             BuildUI();
+            RestoreWindowLayout();
+
+            ResizeEnd += (_, _) => PersistWindowLayout();
+            Move += (_, _) =>
+            {
+                if (WindowState == FormWindowState.Normal)
+                {
+                    PersistWindowLayout();
+                }
+            };
 
             PopulateTree();
         }
@@ -52,10 +71,10 @@ namespace PCStatsTray
         private void BuildUI()
         {
             // --- Sidebar (TreeView) ---
-            var sidePanel = new Panel
+            _sidePanel = new Panel
             {
                 Dock = DockStyle.Left,
-                Width = 200,
+                Width = DefaultSidebarWidth,
                 BackColor = BgSidebar,
                 Padding = new Padding(0)
             };
@@ -92,8 +111,8 @@ namespace PCStatsTray
                 RefreshGrid();
             };
 
-            sidePanel.Controls.Add(_tree);
-            sidePanel.Controls.Add(sideLabel);
+            _sidePanel.Controls.Add(_tree);
+            _sidePanel.Controls.Add(sideLabel);
 
             // Splitter
             var splitter = new Splitter
@@ -102,6 +121,7 @@ namespace PCStatsTray
                 Width = 3,
                 BackColor = BorderColor
             };
+            splitter.SplitterMoved += (_, _) => PersistWindowLayout();
 
             // --- Top bar ---
             var topPanel = new Panel
@@ -206,7 +226,7 @@ namespace PCStatsTray
             // Add controls in order
             Controls.Add(contentPanel);
             Controls.Add(splitter);
-            Controls.Add(sidePanel);
+            Controls.Add(_sidePanel);
         }
 
         private void PopulateTree()
@@ -485,8 +505,55 @@ namespace PCStatsTray
             AppConfigStore.SaveHiddenSensors(AppConfigStore.DefaultPath, hidden);
         }
 
+        private void RestoreWindowLayout()
+        {
+            var layout = AppConfigStore.LoadDetailsWindowLayout(AppConfigStore.DefaultPath);
+            _sidePanel.Width = ClampSidebarWidth(layout.SidebarWidth, Width);
+
+            if (layout.X < 0 || layout.Y < 0)
+            {
+                return;
+            }
+
+            var savedBounds = new Rectangle(layout.X, layout.Y, layout.Width, layout.Height);
+            bool isVisibleOnAnyScreen = Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(savedBounds));
+            if (!isVisibleOnAnyScreen)
+            {
+                return;
+            }
+
+            StartPosition = FormStartPosition.Manual;
+            Bounds = savedBounds;
+            _sidePanel.Width = ClampSidebarWidth(layout.SidebarWidth, Width);
+        }
+
+        private void PersistWindowLayout()
+        {
+            Rectangle bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            if (bounds.Width < MinimumWindowWidth || bounds.Height < MinimumWindowHeight)
+            {
+                return;
+            }
+
+            AppConfigStore.SaveDetailsWindowLayout(AppConfigStore.DefaultPath, new DetailsWindowLayout
+            {
+                X = bounds.X,
+                Y = bounds.Y,
+                Width = bounds.Width,
+                Height = bounds.Height,
+                SidebarWidth = ClampSidebarWidth(_sidePanel.Width, bounds.Width)
+            });
+        }
+
+        private static int ClampSidebarWidth(int width, int totalWidth)
+        {
+            int maxWidth = Math.Min(MaximumSidebarWidth, Math.Max(MinimumSidebarWidth, totalWidth - 220));
+            return Math.Clamp(width, MinimumSidebarWidth, maxWidth);
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            PersistWindowLayout();
             if (e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;

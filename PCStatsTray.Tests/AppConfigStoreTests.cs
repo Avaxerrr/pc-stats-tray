@@ -164,5 +164,50 @@ namespace PCStatsTray.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void SaveDetailsWindowLayout_PreservesOverlayAndHiddenSensors()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                AppConfigStore.SaveHiddenSensors(path, new[] { "cpu/temp" });
+                AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
+                {
+                    Enabled = false,
+                    PhoneDashboardPort = 4588
+                });
+
+                AppConfigStore.SaveDetailsWindowLayout(path, new DetailsWindowLayout
+                {
+                    X = 100,
+                    Y = 120,
+                    Width = 960,
+                    Height = 640,
+                    SidebarWidth = 280
+                });
+
+                var hiddenSensors = AppConfigStore.LoadHiddenSensors(path);
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+                var layout = AppConfigStore.LoadDetailsWindowLayout(path);
+
+                CollectionAssert.AreEquivalent(new[] { "cpu/temp" }, hiddenSensors.ToArray());
+                Assert.IsFalse(overlay.Enabled);
+                Assert.AreEqual(4588, overlay.PhoneDashboardPort);
+                Assert.AreEqual(100, layout.X);
+                Assert.AreEqual(120, layout.Y);
+                Assert.AreEqual(960, layout.Width);
+                Assert.AreEqual(640, layout.Height);
+                Assert.AreEqual(280, layout.SidebarWidth);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
     }
 }
