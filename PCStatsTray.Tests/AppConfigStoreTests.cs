@@ -21,6 +21,7 @@ namespace PCStatsTray.Tests
                     DesktopHotkeyDisplay = "Ctrl+Alt+Shift+F8",
                     RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10",
                     VramDisplayMode = OverlayConfig.VramDisplayPercentage,
+                    RefreshIntervalMs = 5000,
                     PhoneDashboardEnabled = true,
                     PhoneDashboardPort = 4588
                 };
@@ -36,6 +37,7 @@ namespace PCStatsTray.Tests
                 Assert.AreEqual("Ctrl+Alt+Shift+F8", reloadedOverlay.DesktopHotkeyDisplay);
                 Assert.AreEqual("Ctrl+Alt+Shift+F10", reloadedOverlay.RtssHotkeyDisplay);
                 Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
+                Assert.AreEqual(5000, reloadedOverlay.RefreshIntervalMs);
                 Assert.IsTrue(reloadedOverlay.PhoneDashboardEnabled);
                 Assert.AreEqual(4588, reloadedOverlay.PhoneDashboardPort);
             }

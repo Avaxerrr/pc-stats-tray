@@ -106,6 +106,7 @@ namespace PCStatsTray
         public int TextOutlineThickness { get; set; } = 2;
         public string RamDisplayMode { get; set; } = RamDisplayUsedAndTotal;
         public string VramDisplayMode { get; set; } = VramDisplayUsedAndTotal;
+        public int RefreshIntervalMs { get; set; } = 1000;
         public int SettingsWindowX { get; set; } = -1;
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
@@ -210,6 +211,11 @@ namespace PCStatsTray
             if (PhoneDashboardPort is < 1024 or > 65535)
             {
                 PhoneDashboardPort = 4587;
+            }
+
+            if (RefreshIntervalMs is not (1000 or 2000 or 5000))
+            {
+                RefreshIntervalMs = 1000;
             }
         }
 

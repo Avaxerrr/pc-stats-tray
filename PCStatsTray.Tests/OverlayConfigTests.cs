@@ -118,5 +118,18 @@ namespace PCStatsTray.Tests
 
             Assert.AreEqual(4587, config.PhoneDashboardPort);
         }
+
+        [TestMethod]
+        public void NormalizeDashboard_ClampsInvalidRefreshInterval()
+        {
+            var config = new OverlayConfig
+            {
+                RefreshIntervalMs = 3000
+            };
+
+            config.NormalizeDashboard();
+
+            Assert.AreEqual(1000, config.RefreshIntervalMs);
+        }
     }
 }

@@ -119,13 +119,13 @@ namespace PCStatsTray
             hotkeyService.HotkeyPressed += OnHotkeyPressed;
             hotkeyService.ApplyConfig(overlayConfig);
 
-            RefreshAllData();
-            MaybeShowPawnIoPrompt();
-
             refreshTimer = new System.Windows.Forms.Timer();
-            refreshTimer.Interval = DefaultRefreshIntervalMs;
+            refreshTimer.Interval = overlayConfig.RefreshIntervalMs;
             refreshTimer.Tick += (sender, e) => { RefreshAllData(); };
             refreshTimer.Start();
+
+            RefreshAllData();
+            MaybeShowPawnIoPrompt();
 
             Application.ApplicationExit += (s, e) => { CleanUp(); };
 
@@ -138,15 +138,15 @@ namespace PCStatsTray
 
             string selectedRefreshRate = GetRefreshRateMenuText();
             var refreshRateItem = new ToolStripMenuItem("Metrics Refresh Rate");
-            var rate1s = new ToolStripMenuItem("1s", null, (s, e) => { refreshTimer.Interval = 1000; CheckRefreshRateMenu(refreshRateItem, "1s"); RefreshAllData(); })
+            var rate1s = new ToolStripMenuItem("1s", null, (s, e) => { SetRefreshInterval(1000); CheckRefreshRateMenu(refreshRateItem, "1s"); RefreshAllData(); })
             {
                 Checked = selectedRefreshRate == "1s"
             };
-            var rate2s = new ToolStripMenuItem("2s", null, (s, e) => { refreshTimer.Interval = 2000; CheckRefreshRateMenu(refreshRateItem, "2s"); RefreshAllData(); })
+            var rate2s = new ToolStripMenuItem("2s", null, (s, e) => { SetRefreshInterval(2000); CheckRefreshRateMenu(refreshRateItem, "2s"); RefreshAllData(); })
             {
                 Checked = selectedRefreshRate == "2s"
             };
-            var rate5s = new ToolStripMenuItem("5s", null, (s, e) => { refreshTimer.Interval = 5000; CheckRefreshRateMenu(refreshRateItem, "5s"); RefreshAllData(); })
+            var rate5s = new ToolStripMenuItem("5s", null, (s, e) => { SetRefreshInterval(5000); CheckRefreshRateMenu(refreshRateItem, "5s"); RefreshAllData(); })
             {
                 Checked = selectedRefreshRate == "5s"
             };
@@ -389,13 +389,24 @@ namespace PCStatsTray
 
         private static string GetRefreshRateMenuText()
         {
-            int intervalMs = refreshTimer?.Interval ?? DefaultRefreshIntervalMs;
+            int intervalMs = refreshTimer?.Interval ?? overlayConfig.RefreshIntervalMs;
             return intervalMs switch
             {
                 1000 => "1s",
                 5000 => "5s",
                 _ => "2s"
             };
+        }
+
+        private static void SetRefreshInterval(int intervalMs)
+        {
+            overlayConfig.RefreshIntervalMs = intervalMs;
+            if (refreshTimer != null)
+            {
+                refreshTimer.Interval = intervalMs;
+            }
+
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
         }
 
         private static void RefreshAllData()
