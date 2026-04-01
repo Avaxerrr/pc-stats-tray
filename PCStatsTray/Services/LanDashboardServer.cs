@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -14,6 +15,7 @@ namespace PCStatsTray
     internal sealed class LanDashboardServer : IDisposable
     {
         private const int MaxRequestBytes = 8192;
+        private const string EmbeddedAssetPrefix = "PCStatsTray.Web.";
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -292,23 +294,20 @@ namespace PCStatsTray
 
         private static async Task WriteAssetResponseAsync(NetworkStream stream, string assetFileName, CancellationToken cancellationToken)
         {
-            string webRoot = GetWebRoot();
-            string assetPath = Path.Combine(webRoot, assetFileName);
-            string contentType = GetContentType(assetPath);
-            await WriteAssetResponseAsync(stream, assetPath, contentType, cancellationToken);
+            string contentType = GetContentType(assetFileName);
+            await WriteAssetResponseAsync(stream, assetFileName, contentType, cancellationToken);
         }
 
         private static async Task WriteAssetResponseAsync(NetworkStream stream, string assetPath, string contentType, CancellationToken cancellationToken)
         {
-            if (!File.Exists(assetPath))
+            if (!TryLoadAssetBytes(assetPath, out byte[]? bodyBytes))
             {
                 string missingBody = BuildMissingAssetHtml(Path.GetFileName(assetPath));
                 await WriteResponseAsync(stream, "404 Not Found", "text/html; charset=utf-8", missingBody, cancellationToken);
                 return;
             }
 
-            byte[] bodyBytes = await File.ReadAllBytesAsync(assetPath, cancellationToken);
-            await WriteBinaryResponseAsync(stream, "200 OK", contentType, bodyBytes, cancellationToken);
+            await WriteBinaryResponseAsync(stream, "200 OK", contentType, bodyBytes!, cancellationToken);
         }
 
         private static async Task WriteResponseAsync(NetworkStream stream, string status, string contentType, string body, CancellationToken cancellationToken)
@@ -336,6 +335,43 @@ namespace PCStatsTray
         private static string GetWebRoot()
         {
             return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Web");
+        }
+
+        private static bool TryLoadAssetBytes(string assetPath, out byte[]? bodyBytes)
+        {
+            string directPath = assetPath;
+            if (!Path.IsPathRooted(directPath))
+            {
+                directPath = Path.Combine(GetWebRoot(), assetPath);
+            }
+
+            if (File.Exists(directPath))
+            {
+                bodyBytes = File.ReadAllBytes(directPath);
+                return true;
+            }
+
+            string relativePath = Path.GetRelativePath(GetWebRoot(), directPath);
+            if (relativePath.StartsWith("..", StringComparison.Ordinal))
+            {
+                relativePath = assetPath.TrimStart('/', '\\');
+            }
+
+            string resourceName = EmbeddedAssetPrefix + relativePath
+                .Replace(Path.DirectorySeparatorChar, '.')
+                .Replace(Path.AltDirectorySeparatorChar, '.');
+
+            using Stream? resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+            if (resourceStream == null)
+            {
+                bodyBytes = null;
+                return false;
+            }
+
+            using var memoryStream = new MemoryStream();
+            resourceStream.CopyTo(memoryStream);
+            bodyBytes = memoryStream.ToArray();
+            return true;
         }
 
         private static bool TryResolveAssetPath(string requestPath, out string? assetPath, out string contentType)
