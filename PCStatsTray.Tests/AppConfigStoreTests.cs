@@ -18,8 +18,8 @@ namespace PCStatsTray.Tests
                 {
                     Enabled = false,
                     FontFamily = "Bahnschrift",
-                    DesktopHotkeyDisplay = "Ctrl+Shift+D",
-                    RtssHotkeyDisplay = "Ctrl+Shift+R",
+                    DesktopHotkeyDisplay = "Ctrl+Alt+Shift+F8",
+                    RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10",
                     VramDisplayMode = OverlayConfig.VramDisplayPercentage
                 };
 
@@ -31,8 +31,8 @@ namespace PCStatsTray.Tests
                 CollectionAssert.AreEquivalent(new[] { "cpu/temp", "gpu/temp" }, hiddenSensors.ToArray());
                 Assert.IsFalse(reloadedOverlay.Enabled);
                 Assert.AreEqual("Bahnschrift", reloadedOverlay.FontFamily);
-                Assert.AreEqual("Ctrl+Shift+D", reloadedOverlay.DesktopHotkeyDisplay);
-                Assert.AreEqual("Ctrl+Shift+R", reloadedOverlay.RtssHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F8", reloadedOverlay.DesktopHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F10", reloadedOverlay.RtssHotkeyDisplay);
                 Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
             }
             finally
@@ -54,6 +54,50 @@ namespace PCStatsTray.Tests
             Assert.IsTrue(overlay.Enabled);
             Assert.IsTrue(overlay.Metrics.Count > 0);
             Assert.AreEqual("CpuTemp", overlay.Metrics[0].Key);
+            Assert.AreEqual("Ctrl+Alt+Shift+F12", overlay.SettingsHotkeyDisplay);
+        }
+
+        [TestMethod]
+        public void LoadOverlayConfig_MigratesLegacyDefaultHotkeys()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                File.WriteAllText(path,
+                    """
+                    {
+                      "overlay": {
+                        "hotkeyDisplay": "Ctrl+Shift+O",
+                        "hotkeyModifiers": 6,
+                        "hotkeyVk": 79,
+                        "desktopHotkeyDisplay": "Ctrl+Shift+D",
+                        "desktopHotkeyModifiers": 6,
+                        "desktopHotkeyVk": 68,
+                        "rtssHotkeyDisplay": "Ctrl+Shift+R",
+                        "rtssHotkeyModifiers": 6,
+                        "rtssHotkeyVk": 82,
+                        "settingsHotkeyDisplay": "Ctrl+Shift+S",
+                        "settingsHotkeyModifiers": 6,
+                        "settingsHotkeyVk": 83
+                      }
+                    }
+                    """);
+
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+
+                Assert.AreEqual("Ctrl+Alt+Shift+F7", overlay.HotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F8", overlay.DesktopHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F10", overlay.RtssHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F12", overlay.SettingsHotkeyDisplay);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
         }
 
         [TestMethod]

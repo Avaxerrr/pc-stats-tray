@@ -241,7 +241,14 @@ namespace PCStatsTray
                 _ => screen.Bottom - Height - offsetY
             };
 
-            Location = new Point(x, y);
+            int minX = screen.Left;
+            int maxX = Math.Max(minX, screen.Right - Width);
+            int minY = screen.Top;
+            int maxY = Math.Max(minY, screen.Bottom - Height);
+
+            Location = new Point(
+                Math.Clamp(x, minX, maxX),
+                Math.Clamp(y, minY, maxY));
         }
 
         private void UpdateOverlay()

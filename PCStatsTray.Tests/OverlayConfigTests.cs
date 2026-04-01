@@ -57,5 +57,53 @@ namespace PCStatsTray.Tests
 
             Assert.IsTrue(config.ShowVramAsPercentage());
         }
+
+        [TestMethod]
+        public void NormalizeHotkeys_MigratesLegacyDefaultShortcuts()
+        {
+            var config = new OverlayConfig
+            {
+                HotkeyDisplay = "Ctrl+Shift+O",
+                HotkeyModifiers = 0x0002 | 0x0004,
+                HotkeyVk = 0x4F,
+                DesktopHotkeyDisplay = "Ctrl+Shift+D",
+                DesktopHotkeyModifiers = 0x0002 | 0x0004,
+                DesktopHotkeyVk = 0x44,
+                RtssHotkeyDisplay = "Ctrl+Shift+R",
+                RtssHotkeyModifiers = 0x0002 | 0x0004,
+                RtssHotkeyVk = 0x52,
+                SettingsHotkeyDisplay = "Ctrl+Shift+S",
+                SettingsHotkeyModifiers = 0x0002 | 0x0004,
+                SettingsHotkeyVk = 0x53
+            };
+
+            config.NormalizeHotkeys();
+
+            Assert.AreEqual("Ctrl+Alt+Shift+F7", config.HotkeyDisplay);
+            Assert.AreEqual(0x0001 | 0x0002 | 0x0004, config.HotkeyModifiers);
+            Assert.AreEqual(0x76, config.HotkeyVk);
+            Assert.AreEqual("Ctrl+Alt+Shift+F8", config.DesktopHotkeyDisplay);
+            Assert.AreEqual(0x77, config.DesktopHotkeyVk);
+            Assert.AreEqual("Ctrl+Alt+Shift+F10", config.RtssHotkeyDisplay);
+            Assert.AreEqual(0x79, config.RtssHotkeyVk);
+            Assert.AreEqual("Ctrl+Alt+Shift+F12", config.SettingsHotkeyDisplay);
+            Assert.AreEqual(0x7B, config.SettingsHotkeyVk);
+        }
+
+        [TestMethod]
+        public void NormalizeHotkeys_DoesNotOverrideCustomShortcuts()
+        {
+            var config = new OverlayConfig
+            {
+                HotkeyDisplay = "Ctrl+Alt+Shift+F6",
+                HotkeyModifiers = 0x0001 | 0x0002 | 0x0004,
+                HotkeyVk = 0x75
+            };
+
+            config.NormalizeHotkeys();
+
+            Assert.AreEqual("Ctrl+Alt+Shift+F6", config.HotkeyDisplay);
+            Assert.AreEqual(0x75, config.HotkeyVk);
+        }
     }
 }

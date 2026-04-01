@@ -23,6 +23,7 @@ namespace PCStatsTray
                 var config = LoadFullConfig(path);
                 if (config?.Overlay != null)
                 {
+                    config.Overlay.NormalizeHotkeys();
                     config.Overlay.NormalizeMetrics();
                     return config.Overlay;
                 }
@@ -32,6 +33,7 @@ namespace PCStatsTray
             }
 
             var overlay = new OverlayConfig();
+            overlay.NormalizeHotkeys();
             overlay.NormalizeMetrics();
             return overlay;
         }
@@ -40,6 +42,7 @@ namespace PCStatsTray
         {
             try
             {
+                overlay.NormalizeHotkeys();
                 overlay.NormalizeMetrics();
                 var config = LoadFullConfig(path) ?? new StoredAppConfig();
                 config.Overlay = overlay;
