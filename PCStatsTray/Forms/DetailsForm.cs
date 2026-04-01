@@ -10,7 +10,6 @@ namespace PCStatsTray
     public class DetailsForm : Form
     {
         private readonly Computer _computer;
-        private readonly System.Windows.Forms.Timer _refreshTimer;
         private TreeView _tree = null!;
         private DataGridView _grid = null!;
         private HashSet<string> _hiddenSensors;
@@ -46,10 +45,6 @@ namespace PCStatsTray
             TopMost = true;
 
             BuildUI();
-
-            _refreshTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-            _refreshTimer.Tick += (s, e) => RefreshGrid();
-            _refreshTimer.Start();
 
             PopulateTree();
         }
@@ -269,11 +264,14 @@ namespace PCStatsTray
             _ => "📦  Other"
         };
 
+        public void RefreshFromCurrentSnapshot()
+        {
+            RefreshGrid();
+        }
+
         private void RefreshGrid()
         {
             if (_selectedHardware == null) return;
-
-            _computer.Accept(new UpdateVisitor());
 
             int scrollIndex = _grid.FirstDisplayedScrollingRowIndex;
             _grid.Rows.Clear();
@@ -499,7 +497,6 @@ namespace PCStatsTray
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) _refreshTimer?.Dispose();
             base.Dispose(disposing);
         }
 

@@ -7,7 +7,7 @@ namespace PCStatsTray
     {
         public DateTimeOffset GeneratedAtUtc { get; init; } = DateTimeOffset.UtcNow;
         public string MachineName { get; init; } = Environment.MachineName;
-        public int RefreshIntervalMs { get; init; } = 2500;
+        public int RefreshIntervalMs { get; init; } = 1000;
         public List<DashboardMetricSnapshot> Metrics { get; init; } = new();
     }
 

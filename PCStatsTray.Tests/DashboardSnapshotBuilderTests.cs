@@ -24,9 +24,11 @@ namespace PCStatsTray.Tests
                     ["CpuTemp"] = "72°C",
                     ["GpuLoad"] = "91%",
                     ["CpuClock"] = "5200 MHz"
-                });
+                },
+                1000);
 
             Assert.AreEqual(3, snapshot.Metrics.Count);
+            Assert.AreEqual(1000, snapshot.RefreshIntervalMs);
 
             var cpuTemp = snapshot.Metrics.Single(metric => metric.Key == "CpuTemp");
             Assert.AreEqual("CPU", cpuTemp.Group);

@@ -6,12 +6,12 @@ namespace PCStatsTray
 {
     internal static class DashboardSnapshotBuilder
     {
-        public static DashboardSnapshot Build(Computer computer, OverlayConfig config)
+        public static DashboardSnapshot Build(Computer computer, OverlayConfig config, int refreshIntervalMs)
         {
-            return Build(config, OverlayMetricCollector.Collect(computer, config));
+            return Build(config, OverlayMetricCollector.Collect(computer, config), refreshIntervalMs);
         }
 
-        internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues)
+        internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, int refreshIntervalMs)
         {
             var metrics = DashboardMetricCatalog.GetDefinitions()
                 .Where(metric => currentValues.ContainsKey(metric.Key))
@@ -30,7 +30,7 @@ namespace PCStatsTray
             {
                 GeneratedAtUtc = System.DateTimeOffset.UtcNow,
                 MachineName = System.Environment.MachineName,
-                RefreshIntervalMs = 2500,
+                RefreshIntervalMs = refreshIntervalMs,
                 Metrics = metrics
             };
         }

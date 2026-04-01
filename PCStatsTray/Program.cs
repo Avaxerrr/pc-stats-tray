@@ -24,12 +24,13 @@ namespace PCStatsTray
     {
         private const int SM_CXSMICON = 49;
         private const int SM_CYSMICON = 50;
+        private const int DefaultRefreshIntervalMs = 1000;
 
         private static NotifyIcon cpuTrayIcon = null!;
         private static NotifyIcon gpuTrayIcon = null!;
         private static Computer computer = null!;
         private static ContextMenuStrip contextMenu = null!;
-        private static System.Windows.Forms.Timer timer = null!;
+        private static System.Windows.Forms.Timer refreshTimer = null!;
         private static DetailsForm? detailsForm;
         private static OverlaySettingsForm? settingsForm;
 
@@ -54,6 +55,8 @@ namespace PCStatsTray
         private static float gpuMaxTemp = float.MinValue;
         private static double gpuSumTemp = 0;
         private static long gpuTempCount = 0;
+        private static float latestCpuTemp = 0;
+        private static float latestGpuTemp = 0;
 
         [STAThread]
         static void Main()
@@ -87,10 +90,7 @@ namespace PCStatsTray
             // Load overlay config
             overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
-            computer.Accept(new UpdateVisitor());
-            cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
             lanDashboardServer = new LanDashboardServer();
-            lanDashboardServer.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
             lanDashboardServer.ApplyConfig(overlayConfig);
 
             contextMenu = new ContextMenuStrip();
@@ -119,14 +119,13 @@ namespace PCStatsTray
             hotkeyService.HotkeyPressed += OnHotkeyPressed;
             hotkeyService.ApplyConfig(overlayConfig);
 
-            UpdateData();
-            ApplyOverlayOutputs();
+            RefreshAllData();
             MaybeShowPawnIoPrompt();
 
-            timer = new System.Windows.Forms.Timer();
-            timer.Interval = 2000;
-            timer.Tick += (sender, e) => { UpdateData(); };
-            timer.Start();
+            refreshTimer = new System.Windows.Forms.Timer();
+            refreshTimer.Interval = DefaultRefreshIntervalMs;
+            refreshTimer.Tick += (sender, e) => { RefreshAllData(); };
+            refreshTimer.Start();
 
             Application.ApplicationExit += (s, e) => { CleanUp(); };
 
@@ -137,10 +136,20 @@ namespace PCStatsTray
         {
             contextMenu.Items.Clear();
 
-            var refreshRateItem = new ToolStripMenuItem("Refresh Rate");
-            var rate1s = new ToolStripMenuItem("1s", null, (s, e) => { timer.Interval = 1000; CheckRefreshRateMenu(refreshRateItem, "1s"); });
-            var rate2s = new ToolStripMenuItem("2s", null, (s, e) => { timer.Interval = 2000; CheckRefreshRateMenu(refreshRateItem, "2s"); }) { Checked = true };
-            var rate5s = new ToolStripMenuItem("5s", null, (s, e) => { timer.Interval = 5000; CheckRefreshRateMenu(refreshRateItem, "5s"); });
+            string selectedRefreshRate = GetRefreshRateMenuText();
+            var refreshRateItem = new ToolStripMenuItem("Metrics Refresh Rate");
+            var rate1s = new ToolStripMenuItem("1s", null, (s, e) => { refreshTimer.Interval = 1000; CheckRefreshRateMenu(refreshRateItem, "1s"); RefreshAllData(); })
+            {
+                Checked = selectedRefreshRate == "1s"
+            };
+            var rate2s = new ToolStripMenuItem("2s", null, (s, e) => { refreshTimer.Interval = 2000; CheckRefreshRateMenu(refreshRateItem, "2s"); RefreshAllData(); })
+            {
+                Checked = selectedRefreshRate == "2s"
+            };
+            var rate5s = new ToolStripMenuItem("5s", null, (s, e) => { refreshTimer.Interval = 5000; CheckRefreshRateMenu(refreshRateItem, "5s"); RefreshAllData(); })
+            {
+                Checked = selectedRefreshRate == "5s"
+            };
             refreshRateItem.DropDownItems.AddRange(new ToolStripItem[] { rate1s, rate2s, rate5s });
             
             contextMenu.Items.Add(refreshRateItem);
@@ -152,6 +161,7 @@ namespace PCStatsTray
                     detailsForm = new DetailsForm(computer);
                 detailsForm.Show();
                 detailsForm.BringToFront();
+                detailsForm.RefreshFromCurrentSnapshot();
             });
 
             cpuSensorSetupItem = new ToolStripMenuItem(BuildCpuSensorSetupMenuText())
@@ -336,7 +346,7 @@ namespace PCStatsTray
             overlayConfig = config;
             hotkeyService?.ApplyConfig(config);
             lanDashboardServer?.ApplyConfig(config);
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -349,6 +359,7 @@ namespace PCStatsTray
 
             // Refresh context menu to show new hotkey
             PopulateInitialMenu();
+            RefreshAllData();
         }
 
 
@@ -376,18 +387,31 @@ namespace PCStatsTray
             }
         }
 
-        private static void UpdateData()
+        private static string GetRefreshRateMenuText()
+        {
+            int intervalMs = refreshTimer?.Interval ?? DefaultRefreshIntervalMs;
+            return intervalMs switch
+            {
+                1000 => "1s",
+                5000 => "5s",
+                _ => "2s"
+            };
+        }
+
+        private static void RefreshAllData()
         {
             computer.Accept(new UpdateVisitor());
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+            CaptureLatestTemperatures();
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
             UpdateCpuSensorSetupMenu();
             UpdateIcon();
 
-            // Refresh overlay if visible
+            // Refresh all consumers from the same central cadence.
+            detailsForm?.RefreshFromCurrentSnapshot();
             overlayForm?.RefreshData();
             SyncRtssOverlay();
             UpdateRtssStatusMenu();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
             UpdatePhoneDashboardStatusMenu();
         }
 
@@ -504,8 +528,8 @@ namespace PCStatsTray
 
         private static void UpdateIcon()
         {
-            float maxCpuTemp = 0;
-            float maxGpuTemp = 0;
+            float maxCpuTemp = latestCpuTemp;
+            float maxGpuTemp = latestGpuTemp;
 
             foreach (var hw in computer.Hardware)
             {
@@ -526,22 +550,6 @@ namespace PCStatsTray
                 }
             }
 
-            if (maxCpuTemp > 0)
-            {
-                if (maxCpuTemp < cpuMinTemp) cpuMinTemp = maxCpuTemp;
-                if (maxCpuTemp > cpuMaxTemp) cpuMaxTemp = maxCpuTemp;
-                cpuSumTemp += maxCpuTemp;
-                cpuTempCount++;
-            }
-
-            if (maxGpuTemp > 0)
-            {
-                if (maxGpuTemp < gpuMinTemp) gpuMinTemp = maxGpuTemp;
-                if (maxGpuTemp > gpuMaxTemp) gpuMaxTemp = maxGpuTemp;
-                gpuSumTemp += maxGpuTemp;
-                gpuTempCount++;
-            }
-
             float cpuAvg = cpuTempCount > 0 ? (float)(cpuSumTemp / cpuTempCount) : 0;
             float gpuAvg = gpuTempCount > 0 ? (float)(gpuSumTemp / gpuTempCount) : 0;
 
@@ -555,6 +563,54 @@ namespace PCStatsTray
 
             SetSmoothedTrayIcon(cpuTrayIcon, maxCpuTemp);
             SetSmoothedTrayIcon(gpuTrayIcon, maxGpuTemp);
+        }
+
+        private static void CaptureLatestTemperatures()
+        {
+            float sampledCpuTemp = 0;
+            float sampledGpuTemp = 0;
+
+            foreach (var hw in computer.Hardware)
+            {
+                if (hw.HardwareType == HardwareType.Cpu)
+                {
+                    var cpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledCpuTemp < 0.1f && s.Name.Contains("Core Max"))
+                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledCpuTemp < 0.1f && s.Name.Contains("Package"))
+                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
+                    if (cpuTempSensor?.Value.HasValue == true)
+                    {
+                        sampledCpuTemp = Math.Max(sampledCpuTemp, cpuTempSensor.Value.Value);
+                    }
+                }
+                else if (hw.HardwareType == HardwareType.GpuNvidia || hw.HardwareType == HardwareType.GpuAmd || hw.HardwareType == HardwareType.GpuIntel)
+                {
+                    var gpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledGpuTemp < 0.1f && s.Name.Contains("Core"))
+                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
+                    if (gpuTempSensor?.Value.HasValue == true)
+                    {
+                        sampledGpuTemp = Math.Max(sampledGpuTemp, gpuTempSensor.Value.Value);
+                    }
+                }
+            }
+
+            latestCpuTemp = sampledCpuTemp;
+            latestGpuTemp = sampledGpuTemp;
+
+            if (sampledCpuTemp > 0)
+            {
+                if (sampledCpuTemp < cpuMinTemp) cpuMinTemp = sampledCpuTemp;
+                if (sampledCpuTemp > cpuMaxTemp) cpuMaxTemp = sampledCpuTemp;
+                cpuSumTemp += sampledCpuTemp;
+                cpuTempCount++;
+            }
+
+            if (sampledGpuTemp > 0)
+            {
+                if (sampledGpuTemp < gpuMinTemp) gpuMinTemp = sampledGpuTemp;
+                if (sampledGpuTemp > gpuMaxTemp) gpuMaxTemp = sampledGpuTemp;
+                gpuSumTemp += sampledGpuTemp;
+                gpuTempCount++;
+            }
         }
 
         private static Color TextColor(float temp)
@@ -752,6 +808,8 @@ namespace PCStatsTray
         private static void CleanUp()
         {
             hotkeyService?.Dispose();
+            refreshTimer?.Stop();
+            refreshTimer?.Dispose();
 
             if (overlayForm != null && !overlayForm.IsDisposed)
             {
