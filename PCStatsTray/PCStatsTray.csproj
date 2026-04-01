@@ -48,6 +48,7 @@
     <None Update="Web\\**\\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <EmbeddedResource Include="Web\\**\\*" />
   </ItemGroup>
 
 </Project>
