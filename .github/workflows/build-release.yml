@@ -85,7 +85,7 @@ jobs:
           "version_label=$label" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload packaged executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.package.outputs.asset_name }}
           path: ${{ runner.temp }}\pcstats-release\${{ steps.package.outputs.asset_name }}
@@ -102,7 +102,7 @@ jobs:
 
     steps:
       - name: Download packaged executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: ${{ needs.package.outputs.asset_name }}
           path: ${{ runner.temp }}\release
