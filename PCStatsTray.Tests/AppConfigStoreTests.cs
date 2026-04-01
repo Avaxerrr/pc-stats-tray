@@ -18,9 +18,11 @@ namespace PCStatsTray.Tests
                 {
                     Enabled = false,
                     FontFamily = "Bahnschrift",
-                    DesktopHotkeyDisplay = "Ctrl+Shift+D",
-                    RtssHotkeyDisplay = "Ctrl+Shift+R",
-                    VramDisplayMode = OverlayConfig.VramDisplayPercentage
+                    DesktopHotkeyDisplay = "Ctrl+Alt+Shift+F8",
+                    RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10",
+                    VramDisplayMode = OverlayConfig.VramDisplayPercentage,
+                    PhoneDashboardEnabled = true,
+                    PhoneDashboardPort = 4588
                 };
 
                 AppConfigStore.SaveOverlayConfig(path, overlay);
@@ -31,9 +33,11 @@ namespace PCStatsTray.Tests
                 CollectionAssert.AreEquivalent(new[] { "cpu/temp", "gpu/temp" }, hiddenSensors.ToArray());
                 Assert.IsFalse(reloadedOverlay.Enabled);
                 Assert.AreEqual("Bahnschrift", reloadedOverlay.FontFamily);
-                Assert.AreEqual("Ctrl+Shift+D", reloadedOverlay.DesktopHotkeyDisplay);
-                Assert.AreEqual("Ctrl+Shift+R", reloadedOverlay.RtssHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F8", reloadedOverlay.DesktopHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F10", reloadedOverlay.RtssHotkeyDisplay);
                 Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
+                Assert.IsTrue(reloadedOverlay.PhoneDashboardEnabled);
+                Assert.AreEqual(4588, reloadedOverlay.PhoneDashboardPort);
             }
             finally
             {
@@ -54,6 +58,50 @@ namespace PCStatsTray.Tests
             Assert.IsTrue(overlay.Enabled);
             Assert.IsTrue(overlay.Metrics.Count > 0);
             Assert.AreEqual("CpuTemp", overlay.Metrics[0].Key);
+            Assert.AreEqual("Ctrl+Alt+Shift+F12", overlay.SettingsHotkeyDisplay);
+        }
+
+        [TestMethod]
+        public void LoadOverlayConfig_MigratesLegacyDefaultHotkeys()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                File.WriteAllText(path,
+                    """
+                    {
+                      "overlay": {
+                        "hotkeyDisplay": "Ctrl+Shift+O",
+                        "hotkeyModifiers": 6,
+                        "hotkeyVk": 79,
+                        "desktopHotkeyDisplay": "Ctrl+Shift+D",
+                        "desktopHotkeyModifiers": 6,
+                        "desktopHotkeyVk": 68,
+                        "rtssHotkeyDisplay": "Ctrl+Shift+R",
+                        "rtssHotkeyModifiers": 6,
+                        "rtssHotkeyVk": 82,
+                        "settingsHotkeyDisplay": "Ctrl+Shift+S",
+                        "settingsHotkeyModifiers": 6,
+                        "settingsHotkeyVk": 83
+                      }
+                    }
+                    """);
+
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+
+                Assert.AreEqual("Ctrl+Alt+Shift+F7", overlay.HotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F8", overlay.DesktopHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F10", overlay.RtssHotkeyDisplay);
+                Assert.AreEqual("Ctrl+Alt+Shift+F12", overlay.SettingsHotkeyDisplay);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
         }
 
         [TestMethod]
@@ -80,6 +128,78 @@ namespace PCStatsTray.Tests
                 Assert.IsFalse(overlay.Enabled);
                 Assert.AreEqual("Consolas", overlay.FontFamily);
                 Assert.IsTrue(suppressPrompt);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void LoadOverlayConfig_NormalizesInvalidDashboardPort()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
+                {
+                    PhoneDashboardEnabled = true,
+                    PhoneDashboardPort = 99999
+                });
+
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+
+                Assert.IsTrue(overlay.PhoneDashboardEnabled);
+                Assert.AreEqual(4587, overlay.PhoneDashboardPort);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void SaveDetailsWindowLayout_PreservesOverlayAndHiddenSensors()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                AppConfigStore.SaveHiddenSensors(path, new[] { "cpu/temp" });
+                AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
+                {
+                    Enabled = false,
+                    PhoneDashboardPort = 4588
+                });
+
+                AppConfigStore.SaveDetailsWindowLayout(path, new DetailsWindowLayout
+                {
+                    X = 100,
+                    Y = 120,
+                    Width = 960,
+                    Height = 640,
+                    SidebarWidth = 280
+                });
+
+                var hiddenSensors = AppConfigStore.LoadHiddenSensors(path);
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+                var layout = AppConfigStore.LoadDetailsWindowLayout(path);
+
+                CollectionAssert.AreEquivalent(new[] { "cpu/temp" }, hiddenSensors.ToArray());
+                Assert.IsFalse(overlay.Enabled);
+                Assert.AreEqual(4588, overlay.PhoneDashboardPort);
+                Assert.AreEqual(100, layout.X);
+                Assert.AreEqual(120, layout.Y);
+                Assert.AreEqual(960, layout.Width);
+                Assert.AreEqual(640, layout.Height);
+                Assert.AreEqual(280, layout.SidebarWidth);
             }
             finally
             {

@@ -61,6 +61,12 @@ namespace PCStatsTray
     /// </summary>
     public class OverlayConfig
     {
+        private const int ModAlt = 0x0001;
+        private const int ModControl = 0x0002;
+        private const int ModShift = 0x0004;
+        private const int DefaultHotkeyModifiers = ModAlt | ModControl | ModShift;
+        private const int LegacyHotkeyModifiers = ModControl | ModShift;
+
         public const string BackgroundSolid = "Solid";
         public const string BackgroundNone = "None";
         public const string RamDisplayUsedAndTotal = "UsedAndTotal";
@@ -71,18 +77,18 @@ namespace PCStatsTray
         public bool Enabled { get; set; } = true;
 
         // Hotkey (Win32 RegisterHotKey values)
-        public string HotkeyDisplay { get; set; } = "Ctrl+Shift+O";
-        public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
-        public int HotkeyVk { get; set; } = 0x4F; // 'O'
-        public string DesktopHotkeyDisplay { get; set; } = "Ctrl+Shift+D";
-        public int DesktopHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
-        public int DesktopHotkeyVk { get; set; } = 0x44; // 'D'
-        public string RtssHotkeyDisplay { get; set; } = "Ctrl+Shift+R";
-        public int RtssHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
-        public int RtssHotkeyVk { get; set; } = 0x52; // 'R'
-        public string SettingsHotkeyDisplay { get; set; } = "Ctrl+Shift+S";
-        public int SettingsHotkeyModifiers { get; set; } = 0x0002 | 0x0004; // MOD_CONTROL | MOD_SHIFT
-        public int SettingsHotkeyVk { get; set; } = 0x53; // 'S'
+        public string HotkeyDisplay { get; set; } = "Ctrl+Alt+Shift+F7";
+        public int HotkeyModifiers { get; set; } = DefaultHotkeyModifiers;
+        public int HotkeyVk { get; set; } = 0x76; // F7
+        public string DesktopHotkeyDisplay { get; set; } = "Ctrl+Alt+Shift+F8";
+        public int DesktopHotkeyModifiers { get; set; } = DefaultHotkeyModifiers;
+        public int DesktopHotkeyVk { get; set; } = 0x77; // F8
+        public string RtssHotkeyDisplay { get; set; } = "Ctrl+Alt+Shift+F10";
+        public int RtssHotkeyModifiers { get; set; } = DefaultHotkeyModifiers;
+        public int RtssHotkeyVk { get; set; } = 0x79; // F10
+        public string SettingsHotkeyDisplay { get; set; } = "Ctrl+Alt+Shift+F12";
+        public int SettingsHotkeyModifiers { get; set; } = DefaultHotkeyModifiers;
+        public int SettingsHotkeyVk { get; set; } = 0x7B; // F12
 
         // Position & layout
         public bool DesktopOverlayEnabled { get; set; } = true;
@@ -104,6 +110,8 @@ namespace PCStatsTray
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
         public int SettingsWindowHeight { get; set; } = 840;
+        public bool PhoneDashboardEnabled { get; set; }
+        public int PhoneDashboardPort { get; set; } = 4587;
         public string CpuFanSensorKey { get; set; } = string.Empty;
         public string GpuFanSensorKey { get; set; } = string.Empty;
         public string CaseFanSensorKey { get; set; } = string.Empty;
@@ -166,6 +174,45 @@ namespace PCStatsTray
             Metrics = normalized;
         }
 
+        public void NormalizeHotkeys()
+        {
+            if (MatchesLegacyDefault(HotkeyDisplay, HotkeyModifiers, HotkeyVk, "Ctrl+Shift+O", 0x4F))
+            {
+                HotkeyDisplay = "Ctrl+Alt+Shift+F7";
+                HotkeyModifiers = DefaultHotkeyModifiers;
+                HotkeyVk = 0x76;
+            }
+
+            if (MatchesLegacyDefault(DesktopHotkeyDisplay, DesktopHotkeyModifiers, DesktopHotkeyVk, "Ctrl+Shift+D", 0x44))
+            {
+                DesktopHotkeyDisplay = "Ctrl+Alt+Shift+F8";
+                DesktopHotkeyModifiers = DefaultHotkeyModifiers;
+                DesktopHotkeyVk = 0x77;
+            }
+
+            if (MatchesLegacyDefault(RtssHotkeyDisplay, RtssHotkeyModifiers, RtssHotkeyVk, "Ctrl+Shift+R", 0x52))
+            {
+                RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10";
+                RtssHotkeyModifiers = DefaultHotkeyModifiers;
+                RtssHotkeyVk = 0x79;
+            }
+
+            if (MatchesLegacyDefault(SettingsHotkeyDisplay, SettingsHotkeyModifiers, SettingsHotkeyVk, "Ctrl+Shift+S", 0x53))
+            {
+                SettingsHotkeyDisplay = "Ctrl+Alt+Shift+F12";
+                SettingsHotkeyModifiers = DefaultHotkeyModifiers;
+                SettingsHotkeyVk = 0x7B;
+            }
+        }
+
+        public void NormalizeDashboard()
+        {
+            if (PhoneDashboardPort is < 1024 or > 65535)
+            {
+                PhoneDashboardPort = 4587;
+            }
+        }
+
         public OverlayPosition GetPosition()
         {
             return Position switch
@@ -203,6 +250,13 @@ namespace PCStatsTray
                    SettingsWindowY >= 0 &&
                    SettingsWindowWidth >= 320 &&
                    SettingsWindowHeight >= 480;
+        }
+
+        private static bool MatchesLegacyDefault(string? display, int modifiers, int virtualKey, string expectedDisplay, int expectedVirtualKey)
+        {
+            return modifiers == LegacyHotkeyModifiers &&
+                   virtualKey == expectedVirtualKey &&
+                   string.Equals(display, expectedDisplay, StringComparison.Ordinal);
         }
     }
 }

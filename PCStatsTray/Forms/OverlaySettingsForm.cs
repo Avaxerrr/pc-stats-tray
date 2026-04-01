@@ -25,6 +25,8 @@ namespace PCStatsTray
 
         private readonly OverlayConfig _config;
         private readonly Action<OverlayConfig> _onSave;
+        private readonly Func<Size> _overlaySizeProvider;
+        private readonly Func<float> _overlayScaleProvider;
         private readonly Computer _computer;
         private readonly List<FanSensorOption> _fanSensorOptions;
 
@@ -77,11 +79,13 @@ namespace PCStatsTray
         private ModernScrollContainer? _scrollContainer;
         private readonly System.Windows.Forms.Timer _statusTimer;
 
-        public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave)
+        public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave, Func<Size>? overlaySizeProvider = null, Func<float>? overlayScaleProvider = null)
         {
             _computer = computer;
             _config = config;
             _onSave = onSave;
+            _overlaySizeProvider = overlaySizeProvider ?? (() => Size.Empty);
+            _overlayScaleProvider = overlayScaleProvider ?? (() => Math.Max(1f, DeviceDpi > 0 ? DeviceDpi / 96f : 1f));
             _computer.Accept(new UpdateVisitor());
             _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
             _capturedToggleAllHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
@@ -120,7 +124,12 @@ namespace PCStatsTray
             UpdateOutputState();
             RestoreWindowBounds();
 
-            ResizeEnd += (_, _) => PersistWindowBounds();
+            ResizeEnd += (_, _) =>
+            {
+                UpdateMarginSliderRanges();
+                PersistWindowBounds();
+            };
+            LocationChanged += (_, _) => UpdateMarginSliderRanges();
             FormClosing += (_, _) => PersistWindowBounds();
         }
 
@@ -234,27 +243,21 @@ namespace PCStatsTray
             posCard.Controls.Add(_verticalTopButton);
             posCard.Controls.Add(_verticalBottomButton);
 
-            posCard.Controls.Add(MakeLabel("Horizontal margin", Ui(16), Ui(122)));
-
-            _horizontalMarginValue = MakeValueLabel($"{_config.OffsetX} px", posCard.Width - Ui(68), Ui(122));
-            posCard.Controls.Add(_horizontalMarginValue);
-            _horizontalMarginSlider = MakeSlider(posCard, Ui(16), Ui(142), posCard.Width - Ui(36), 5, 160, _config.OffsetX);
+            UpdateMarginSliderRanges();
+            AddSliderRow(posCard, "Horizontal margin", Ui(120), 0, Math.Max(1, _horizontalMarginSliderMax), Math.Clamp(_config.OffsetX, 0, _horizontalMarginSliderMax), value => $"{value} px", out _horizontalMarginSlider, out _horizontalMarginValue);
             _horizontalMarginSlider.ValueChanged += (_, _) =>
             {
                 _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
                 ApplyLive();
             };
 
-            posCard.Controls.Add(MakeLabel("Vertical margin", Ui(16), Ui(170)));
-
-            _verticalMarginValue = MakeValueLabel($"{_config.OffsetY} px", posCard.Width - Ui(68), Ui(170));
-            posCard.Controls.Add(_verticalMarginValue);
-            _verticalMarginSlider = MakeSlider(posCard, Ui(16), Ui(190), posCard.Width - Ui(36), 5, 160, _config.OffsetY);
+            AddSliderRow(posCard, "Vertical margin", Ui(166), 0, Math.Max(1, _verticalMarginSliderMax), Math.Clamp(_config.OffsetY, 0, _verticalMarginSliderMax), value => $"{value} px", out _verticalMarginSlider, out _verticalMarginValue);
             _verticalMarginSlider.ValueChanged += (_, _) =>
             {
                 _verticalMarginValue.Text = $"{_verticalMarginSlider.Value} px";
                 ApplyLive();
             };
+
             UpdatePositionButtons();
 
             var appearanceCard = MakeCard(content, "Appearance", ref y, Ui(356), cardWidth, marginX);
@@ -504,6 +507,38 @@ namespace PCStatsTray
 
             CommitConfig();
             _onSave(_config);
+
+            if (RefreshMarginSliderRangesAfterOverlayResize())
+            {
+                CommitConfig();
+                _onSave(_config);
+            }
+        }
+
+        private bool RefreshMarginSliderRangesAfterOverlayResize()
+        {
+            if (_horizontalMarginSlider == null || _verticalMarginSlider == null)
+            {
+                return false;
+            }
+
+            int previousHorizontal = _horizontalMarginSlider.Value;
+            int previousVertical = _verticalMarginSlider.Value;
+
+            _suspendLiveApply = true;
+            try
+            {
+                UpdateMarginSliderRanges();
+                _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
+                _verticalMarginValue.Text = $"{_verticalMarginSlider.Value} px";
+            }
+            finally
+            {
+                _suspendLiveApply = false;
+            }
+
+            return _horizontalMarginSlider.Value != previousHorizontal ||
+                   _verticalMarginSlider.Value != previousVertical;
         }
 
         private void CommitConfig()
@@ -592,6 +627,7 @@ namespace PCStatsTray
                 };
                 UpdatePositionButtons();
 
+                UpdateMarginSliderRanges();
                 _horizontalMarginSlider.Value = Math.Clamp(_config.OffsetX, _horizontalMarginSlider.Minimum, _horizontalMarginSlider.Maximum);
                 _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
                 _verticalMarginSlider.Value = Math.Clamp(_config.OffsetY, _verticalMarginSlider.Minimum, _verticalMarginSlider.Maximum);
@@ -866,6 +902,7 @@ namespace PCStatsTray
             };
         }
 
+
         private TextBox MakeHotkeyBox(string text, Point location, Size size)
         {
             return new TextBox
@@ -896,6 +933,8 @@ namespace PCStatsTray
                 Font = new Font("Segoe UI", 9.5f)
             };
         }
+
+
 
         private ComboBox MakeFanSensorComboBox(Point location, Size size)
         {
@@ -1110,6 +1149,49 @@ namespace PCStatsTray
             comboBox.Enabled = comboBox.Items.Count > 0;
         }
 
+        private int _horizontalMarginSliderMax;
+        private int _verticalMarginSliderMax;
+
+        private void UpdateMarginSliderRanges()
+        {
+            Rectangle workingArea = GetReferenceWorkingArea();
+            Size overlaySize = _overlaySizeProvider();
+            float overlayScale = Math.Max(1f, _overlayScaleProvider());
+            int horizontalTravelPixels = Math.Max(0, workingArea.Width - overlaySize.Width);
+            int verticalTravelPixels = Math.Max(0, workingArea.Height - overlaySize.Height);
+
+            _horizontalMarginSliderMax = Math.Max(1, (int)Math.Floor(horizontalTravelPixels / overlayScale));
+            _verticalMarginSliderMax = Math.Max(1, (int)Math.Floor(verticalTravelPixels / overlayScale));
+
+            if (_horizontalMarginSlider != null)
+            {
+                int hVal = _horizontalMarginSlider.Value;
+                _horizontalMarginSlider.Maximum = _horizontalMarginSliderMax;
+                _horizontalMarginSlider.Value = Math.Clamp(hVal, 0, _horizontalMarginSliderMax);
+            }
+
+            if (_verticalMarginSlider != null)
+            {
+                int vVal = _verticalMarginSlider.Value;
+                _verticalMarginSlider.Maximum = _verticalMarginSliderMax;
+                _verticalMarginSlider.Value = Math.Clamp(vVal, 0, _verticalMarginSliderMax);
+            }
+        }
+
+        private Rectangle GetReferenceWorkingArea()
+        {
+            if (IsHandleCreated)
+            {
+                return Screen.FromControl(this).WorkingArea;
+            }
+
+            Rectangle bounds = Bounds;
+            Point referencePoint = bounds.Width > 0 && bounds.Height > 0
+                ? new Point(bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2))
+                : Cursor.Position;
+            return Screen.FromPoint(referencePoint).WorkingArea;
+        }
+
         private void RestoreWindowBounds()
         {
             int fixedWidth = FixedWindowWidth();
@@ -1151,6 +1233,7 @@ namespace PCStatsTray
         {
             base.OnShown(e);
             _scrollContainer?.RefreshScrollMetrics();
+            UpdateMarginSliderRanges();
             _statusTimer.Start();
             BeginInvoke((Action)(() => ActiveControl = _enabledCheck));
         }

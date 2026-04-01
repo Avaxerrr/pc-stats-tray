@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PC Stats Tray Terminal Dashboard</title>
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body class="dashboard-body">
+  <div class="scanline-anim"></div>
+
+  <div class="layout-shell">
+    <header class="hero-panel">
+      <div class="window-bar">
+        <div class="window-dots">
+          <span class="window-dot dot-red"></span>
+          <span class="window-dot dot-yellow"></span>
+          <span class="window-dot dot-green"></span>
+        </div>
+        <span class="window-label">tty1 - admin@nexus</span>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">
+          <svg class="theme-icon icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2"></path>
+            <path d="M12 20v2"></path>
+            <path d="M4.93 4.93l1.41 1.41"></path>
+            <path d="M17.66 17.66l1.41 1.41"></path>
+            <path d="M2 12h2"></path>
+            <path d="M20 12h2"></path>
+            <path d="M4.93 19.07l1.41-1.41"></path>
+            <path d="M17.66 6.34l1.41-1.41"></path>
+          </svg>
+          <svg class="theme-icon icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3c0 5.21 4.23 9.45 9.45 9.45.11 0 .23 0 .34-.01z"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="hero-content">
+        <div class="prompt-line">
+          <span class="prompt-host">host:<span id="machine-pill">nexus</span></span><span class="prompt-separator"> //</span><span class="prompt-path"> monitor</span><span class="prompt-symbol"> ></span>
+          <span id="typing-text" class="typing-text"></span><span class="cursor-block"></span>
+        </div>
+
+        <div class="hero-grid">
+          <div class="hero-status">
+            <div class="status-row">
+              <span class="status-label">STATUS //</span>
+              <span id="status-text" class="status-text status-connecting">[ CONNECTING... ]</span>
+            </div>
+            <div class="status-row subtle-row">
+              <span class="status-label">SYNC_T //</span>
+              <span id="updated-pill" class="status-value">--:--:--</span>
+            </div>
+            <div class="status-row subtle-row extra-row">
+              <span class="status-label">VISIBLE //</span>
+              <span id="visible-pill" class="status-cyan">0/0</span>
+            </div>
+          </div>
+
+          <div class="hero-actions">
+            <button id="toggle-customize" class="cli-button cli-button-cyan" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.38 17l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82L4.21 7.2A2 2 0 0 1 7.04 4.4l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 19.79 7.2l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1V15Z"></path>
+              </svg>
+              <span>_config</span>
+            </button>
+            <button id="show-all" class="cli-button cli-button-green" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2.06 12.35a1 1 0 0 1 0-.7C3.41 8.6 7.11 6 12 6s8.59 2.6 9.94 5.65a1 1 0 0 1 0 .7C20.59 15.4 16.89 18 12 18s-8.59-2.6-9.94-5.65Z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>_show_all</span>
+            </button>
+            <button id="reset-view" class="cli-button cli-button-red" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path>
+                <path d="M3 3v5h5"></path>
+              </svg>
+              <span>_reset</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="error-banner" class="error-banner" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+          <path d="M12 9v4"></path>
+          <path d="M12 17h.01"></path>
+        </svg>
+        <div class="error-copy">
+          <span class="error-prefix">STDERR ></span>
+          <span id="error-message"></span>
+        </div>
+      </div>
+    </header>
+
+    <div id="customize-wrapper" class="config-panel-shell">
+      <div class="config-panel-inner">
+        <section class="config-panel">
+          <div class="config-heading">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+              <rect x="9" y="9" width="6" height="6"></rect>
+              <path d="M15 2v2"></path>
+              <path d="M15 20v2"></path>
+              <path d="M2 15h2"></path>
+              <path d="M20 15h2"></path>
+              <path d="M2 9h2"></path>
+              <path d="M20 9h2"></path>
+              <path d="M9 2v2"></path>
+              <path d="M9 20v2"></path>
+            </svg>
+            <span>--- METRIC_ROUTING_TABLE ---</span>
+          </div>
+          <div id="toggle-grid" class="toggle-grid"></div>
+        </section>
+      </div>
+    </div>
+
+    <main id="groups" class="groups-root"></main>
+  </div>
+
+  <script src="/dashboard.js"></script>
+</body>
+</html>
