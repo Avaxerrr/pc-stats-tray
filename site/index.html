@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PC Stats Tray</title>
-  <meta name="description" content="A lightweight Windows app that shows PC hardware stats in the tray, on the desktop, and inside games through RTSS.">
+  <meta name="description" content="A lightweight Windows app that shows PC hardware stats in the tray, on the desktop, inside games through RTSS, and in a local LAN dashboard with a read-only API.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;700;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -29,11 +29,12 @@
           <span class="pill">SYS.REQ: WIN 10/11</span>
           <span class="pill">ENV: .NET 10</span>
           <span class="pill">HOOK: RTSS (OPTIONAL)</span>
+          <span class="pill">LAN: DASHBOARD + API</span>
         </div>
 
         <h1>Hardware<br>Monitoring.</h1>
         <p class="lead">
-          A Windows utility that shows hardware stats in the tray icon, on the desktop, and inside supported games through RTSS.
+          A Windows utility that shows hardware stats in the tray icon, on the desktop, inside supported games through RTSS, and in a local browser dashboard you can open from your phone.
         </p>
 
         <div class="actions">
@@ -44,6 +45,7 @@
         <ul class="tech-list">
           <li>Separate CPU and GPU temperature tray icons</li>
           <li>Customizable desktop OSD with font, shadow, outline, and layout controls</li>
+          <li>LAN dashboard and read-only local API for browser and phone viewing</li>
           <li>Direct integration with RivaTuner Statistics Server for in-game overlays</li>
         </ul>
       </div>
@@ -63,19 +65,18 @@
           <li>Right-click the tray icon and open <code>OSD Settings</code>.</li>
           <li>Turn on <code>Desktop OSD</code> for desktop metrics.</li>
           <li>Turn on <code>RTSS OSD (Games)</code> for in-game output if RTSS is installed and running.</li>
+          <li>Turn on <code>Enable LAN Dashboard</code> if you want phone or browser access on your local network.</li>
         </ol>
       </div>
 
       <div class="panel">
-        <p class="eyebrow">Architecture</p>
-        <h2>The RTSS Bridge</h2>
+        <p class="eyebrow">Output Paths</p>
+        <h2>LAN Dashboard + RTSS</h2>
         <p class="panel-copy">
-          PC Stats Tray collects the hardware data, formats the text, and chooses what should be displayed.
-          RTSS (RivaTuner Statistics Server) is the separate renderer that draws those stats inside supported games.
+          PC Stats Tray collects the hardware data once, then reuses that snapshot across the tray, desktop OSD, RTSS output, and the local LAN dashboard.
         </p>
         <p class="panel-copy">
-          To enable the in-game overlay, make sure RTSS is running in the background and
-          <code>Show On-Screen Display</code> is enabled in its profile.
+          The LAN dashboard serves a simple browser UI plus a read-only JSON API on your local network. RTSS remains the separate renderer used for in-game overlay drawing.
         </p>
       </div>
     </section>
@@ -100,8 +101,16 @@
           <p>Send the selected metrics to RTSS for supported in-game overlays.</p>
         </div>
         <div class="panel feature-card">
+          <h3>LAN Dashboard</h3>
+          <p>Open a phone-friendly local dashboard from another device on the same network.</p>
+        </div>
+        <div class="panel feature-card">
+          <h3>Local API</h3>
+          <p>Expose the current metric snapshot through simple read-only local endpoints.</p>
+        </div>
+        <div class="panel feature-card">
           <h3>Quick Control</h3>
-          <p>Open settings or toggle the OSD with hotkeys and tray menu actions.</p>
+          <p>Open settings, toggle outputs, and launch the dashboard from tray menu actions and hotkeys.</p>
         </div>
       </div>
     </section>
@@ -109,7 +118,7 @@
     <section class="showcase">
       <div class="showcase-head">
         <p class="eyebrow">Visual Output</p>
-        <h2>Overlay and Settings</h2>
+        <h2>Overlay, Dashboard, and Settings</h2>
       </div>
 
       <div class="shots">
@@ -120,6 +129,16 @@
           <div class="shot-info">
             <strong>Desktop OSD Layer</strong>
             <span>Show the selected hardware metrics on the desktop overlay.</span>
+          </div>
+        </div>
+
+        <div class="shot">
+          <div class="screenshot-wrapper screenshot-dashboard">
+            <img src="assets/screenshots/dasbhoard.png" alt="LAN dashboard">
+          </div>
+          <div class="shot-info">
+            <strong>LAN Dashboard</strong>
+            <span>View a richer curated metric set in a browser from your phone or another device on your local network.</span>
           </div>
         </div>
 
