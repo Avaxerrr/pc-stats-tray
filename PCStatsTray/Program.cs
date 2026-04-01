@@ -125,6 +125,7 @@ namespace PCStatsTray
             refreshTimer.Start();
 
             RefreshAllData();
+            ApplyOverlayOutputs();
             MaybeShowPawnIoPrompt();
 
             Application.ApplicationExit += (s, e) => { CleanUp(); };
