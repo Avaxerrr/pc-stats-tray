@@ -105,5 +105,18 @@ namespace PCStatsTray.Tests
             Assert.AreEqual("Ctrl+Alt+Shift+F6", config.HotkeyDisplay);
             Assert.AreEqual(0x75, config.HotkeyVk);
         }
+
+        [TestMethod]
+        public void NormalizeDashboard_ClampsInvalidPort()
+        {
+            var config = new OverlayConfig
+            {
+                PhoneDashboardPort = 70000
+            };
+
+            config.NormalizeDashboard();
+
+            Assert.AreEqual(4587, config.PhoneDashboardPort);
+        }
     }
 }

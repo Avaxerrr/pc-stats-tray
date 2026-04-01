@@ -105,6 +105,8 @@ namespace PCStatsTray
 
         protected override bool ShowWithoutActivation => true;
 
+        public float CurrentDpiScale => GetDpiScale();
+
         public void ApplyConfig()
         {
             _metricFont?.Dispose();

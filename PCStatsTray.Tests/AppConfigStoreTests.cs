@@ -20,7 +20,9 @@ namespace PCStatsTray.Tests
                     FontFamily = "Bahnschrift",
                     DesktopHotkeyDisplay = "Ctrl+Alt+Shift+F8",
                     RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10",
-                    VramDisplayMode = OverlayConfig.VramDisplayPercentage
+                    VramDisplayMode = OverlayConfig.VramDisplayPercentage,
+                    PhoneDashboardEnabled = true,
+                    PhoneDashboardPort = 4588
                 };
 
                 AppConfigStore.SaveOverlayConfig(path, overlay);
@@ -34,6 +36,8 @@ namespace PCStatsTray.Tests
                 Assert.AreEqual("Ctrl+Alt+Shift+F8", reloadedOverlay.DesktopHotkeyDisplay);
                 Assert.AreEqual("Ctrl+Alt+Shift+F10", reloadedOverlay.RtssHotkeyDisplay);
                 Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
+                Assert.IsTrue(reloadedOverlay.PhoneDashboardEnabled);
+                Assert.AreEqual(4588, reloadedOverlay.PhoneDashboardPort);
             }
             finally
             {
@@ -124,6 +128,33 @@ namespace PCStatsTray.Tests
                 Assert.IsFalse(overlay.Enabled);
                 Assert.AreEqual("Consolas", overlay.FontFamily);
                 Assert.IsTrue(suppressPrompt);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void LoadOverlayConfig_NormalizesInvalidDashboardPort()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+
+            try
+            {
+                AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
+                {
+                    PhoneDashboardEnabled = true,
+                    PhoneDashboardPort = 99999
+                });
+
+                var overlay = AppConfigStore.LoadOverlayConfig(path);
+
+                Assert.IsTrue(overlay.PhoneDashboardEnabled);
+                Assert.AreEqual(4587, overlay.PhoneDashboardPort);
             }
             finally
             {

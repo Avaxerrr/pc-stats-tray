@@ -40,6 +40,8 @@ namespace PCStatsTray
         private static RtssOverlayClient? rtssOverlayClient;
         private static ToolStripMenuItem? rtssStatusItem;
         private static ToolStripMenuItem? cpuSensorSetupItem;
+        private static ToolStripMenuItem? dashboardStatusItem;
+        private static LanDashboardServer? lanDashboardServer;
         private static CpuSensorSetupStatus cpuSensorSetupStatus = new();
 
         // Temperature tracking for tooltip stats
@@ -87,6 +89,9 @@ namespace PCStatsTray
 
             computer.Accept(new UpdateVisitor());
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+            lanDashboardServer = new LanDashboardServer();
+            lanDashboardServer.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
+            lanDashboardServer.ApplyConfig(overlayConfig);
 
             contextMenu = new ContextMenuStrip();
             PopulateInitialMenu();
@@ -188,6 +193,36 @@ namespace PCStatsTray
 
             contextMenu.Items.Add(new ToolStripSeparator());
 
+            var togglePhoneDashboardItem = new ToolStripMenuItem("Enable LAN Dashboard")
+            {
+                Checked = overlayConfig.PhoneDashboardEnabled
+            };
+            togglePhoneDashboardItem.Click += (s, e) => TogglePhoneDashboard();
+            contextMenu.Items.Add(togglePhoneDashboardItem);
+
+            var openPhoneDashboardItem = new ToolStripMenuItem("Open LAN Dashboard")
+            {
+                Enabled = overlayConfig.PhoneDashboardEnabled && lanDashboardServer?.IsRunning == true
+            };
+            openPhoneDashboardItem.Click += (s, e) => OpenPhoneDashboard();
+            contextMenu.Items.Add(openPhoneDashboardItem);
+
+            var copyPhoneDashboardUrlItem = new ToolStripMenuItem("Copy Dashboard URL")
+            {
+                Enabled = overlayConfig.PhoneDashboardEnabled && lanDashboardServer?.IsRunning == true
+            };
+            copyPhoneDashboardUrlItem.Click += (s, e) => CopyPhoneDashboardUrl();
+            contextMenu.Items.Add(copyPhoneDashboardUrlItem);
+
+            dashboardStatusItem = new ToolStripMenuItem("Dashboard: checking...")
+            {
+                Enabled = false
+            };
+            contextMenu.Items.Add(dashboardStatusItem);
+            UpdatePhoneDashboardStatusMenu();
+
+            contextMenu.Items.Add(new ToolStripSeparator());
+
             var startupItem = new ToolStripMenuItem("Run at Startup");
             startupItem.Checked = StartupTaskService.IsConfigured();
             startupItem.Click += (s, e) => 
@@ -233,6 +268,50 @@ namespace PCStatsTray
             PopulateInitialMenu();
         }
 
+        private static void TogglePhoneDashboard()
+        {
+            overlayConfig.PhoneDashboardEnabled = !overlayConfig.PhoneDashboardEnabled;
+            lanDashboardServer?.ApplyConfig(overlayConfig);
+            AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
+            PopulateInitialMenu();
+        }
+
+        private static void OpenPhoneDashboard()
+        {
+            string url = lanDashboardServer?.GetLocalUrl() ?? $"http://localhost:{overlayConfig.PhoneDashboardPort}/";
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to open the LAN dashboard: " + ex.Message, "LAN Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static void CopyPhoneDashboardUrl()
+        {
+            string? url = lanDashboardServer?.GetLanUrl() ?? lanDashboardServer?.GetLocalUrl();
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            try
+            {
+                Clipboard.SetText(url);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to copy the dashboard URL: " + ex.Message, "LAN Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private static void OnHotkeyPressed(int hotkeyId)
         {
             switch (hotkeyId)
@@ -256,6 +335,8 @@ namespace PCStatsTray
         {
             overlayConfig = config;
             hotkeyService?.ApplyConfig(config);
+            lanDashboardServer?.ApplyConfig(config);
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -295,7 +376,7 @@ namespace PCStatsTray
             }
         }
 
-                private static void UpdateData()
+        private static void UpdateData()
         {
             computer.Accept(new UpdateVisitor());
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
@@ -306,6 +387,8 @@ namespace PCStatsTray
             overlayForm?.RefreshData();
             SyncRtssOverlay();
             UpdateRtssStatusMenu();
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig));
+            UpdatePhoneDashboardStatusMenu();
         }
 
         private static void MaybeShowPawnIoPrompt()
@@ -684,6 +767,7 @@ namespace PCStatsTray
 
              rtssOverlayClient?.Release();
              rtssOverlayClient?.Dispose();
+             lanDashboardServer?.Dispose();
 
             if (cpuTrayIcon != null)
             {
@@ -764,7 +848,9 @@ namespace PCStatsTray
         {
             if (settingsForm == null || settingsForm.IsDisposed)
             {
-                settingsForm = new OverlaySettingsForm(computer, overlayConfig, OnOverlayConfigSaved);
+                settingsForm = new OverlaySettingsForm(computer, overlayConfig, OnOverlayConfigSaved,
+                    () => overlayForm != null && !overlayForm.IsDisposed ? overlayForm.Size : Size.Empty,
+                    () => overlayForm != null && !overlayForm.IsDisposed ? overlayForm.CurrentDpiScale : 1f);
             }
 
             settingsForm.Show();
@@ -817,6 +903,37 @@ namespace PCStatsTray
             }
 
             rtssStatusItem.Text = "RTSS: ready";
+        }
+
+        private static void UpdatePhoneDashboardStatusMenu()
+        {
+            if (dashboardStatusItem == null)
+            {
+                return;
+            }
+
+            if (!overlayConfig.PhoneDashboardEnabled)
+            {
+                dashboardStatusItem.Text = "Dashboard: disabled";
+                return;
+            }
+
+            if (lanDashboardServer == null)
+            {
+                dashboardStatusItem.Text = "Dashboard: unavailable";
+                return;
+            }
+
+            if (!lanDashboardServer.IsRunning)
+            {
+                dashboardStatusItem.Text = string.IsNullOrWhiteSpace(lanDashboardServer.LastError)
+                    ? "Dashboard: stopped"
+                    : $"Dashboard: {lanDashboardServer.LastError}";
+                return;
+            }
+
+            string lanUrl = lanDashboardServer.GetLanUrl() ?? lanDashboardServer.GetLocalUrl();
+            dashboardStatusItem.Text = $"Dashboard: {lanUrl}";
         }
     }
 }

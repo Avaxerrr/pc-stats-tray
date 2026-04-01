@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PC Stats Tray</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --bg-elev: #131928;
+      --bg-card: #171f31;
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #eef2ff;
+      --muted: #9ca9c7;
+      --accent: #63a4ff;
+      --accent-soft: rgba(99, 164, 255, 0.16);
+      --good: #50d27b;
+      --warn: #f2b24d;
+      --hot: #ff7666;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+      color-scheme: dark;
+      font-family: "Segoe UI", "Bahnschrift", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(99, 164, 255, 0.18), transparent 34%),
+        linear-gradient(180deg, #0b0f17 0%, #090d15 100%);
+      color: var(--text);
+    }
+
+    .shell {
+      width: min(100%, 760px);
+      margin: 0 auto;
+      padding: 22px 16px 40px;
+    }
+
+    .hero {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 16px;
+      padding: 18px 18px 14px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(11, 15, 23, 0.92);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 10px 0 8px;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+
+    .subtle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .hero-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #dfeaff;
+      font-size: 12px;
+      border: 1px solid rgba(99, 164, 255, 0.18);
+    }
+
+    .error-banner {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 118, 102, 0.12);
+      border: 1px solid rgba(255, 118, 102, 0.24);
+      color: #ffd1cc;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(99, 164, 255, 0.25);
+      border-radius: 14px;
+      background: #1b2640;
+      color: var(--text);
+      padding: 10px 14px;
+      font: inherit;
+    }
+
+    button.secondary {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--line);
+    }
+
+    .panel {
+      margin-bottom: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--bg-elev);
+      box-shadow: var(--shadow);
+    }
+
+    .panel[hidden] {
+      display: none;
+    }
+
+    .panel-title {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .panel-copy {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .groups {
+      display: grid;
+      gap: 16px;
+    }
+
+    .group {
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(23, 31, 49, 0.95), rgba(14, 20, 31, 0.95));
+      box-shadow: var(--shadow);
+    }
+
+    .group h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 18px;
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .metric-value {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .metric-value.good { color: var(--good); }
+    .metric-value.warn { color: var(--warn); }
+    .metric-value.hot { color: var(--hot); }
+    .metric-value.neutral { color: var(--text); }
+
+    .empty {
+      padding: 20px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 520px) {
+      .shell {
+        padding: 14px 12px 28px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .metric-value {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">PC Stats Tray</div>
+      <h1 id="title">Phone Dashboard</h1>
+      <p class="subtle">Read-only live stats from your PC over your local network.</p>
+      <div class="hero-meta">
+        <div class="pill" id="machine-pill">Waiting for data...</div>
+        <div class="pill" id="updated-pill">Connecting...</div>
+      </div>
+      <div id="error-banner" class="error-banner" hidden></div>
+      <div class="actions">
+        <button id="toggle-customize" type="button">Customize View</button>
+        <button id="show-all" class="secondary" type="button">Show All</button>
+        <button id="reset-view" class="secondary" type="button">Reset</button>
+      </div>
+    </section>
+
+    <section id="customize-panel" class="panel" hidden>
+      <h2 class="panel-title">Visible Metrics</h2>
+      <p class="panel-copy">These switches are saved only in this browser on this phone, so you can keep a simple personal view without changing the desktop app.</p>
+      <div id="toggle-grid" class="toggle-grid"></div>
+    </section>
+
+    <section id="groups" class="groups"></section>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var STORAGE_KEY = "pcstats-dashboard-visible-v1";
+      var title = document.getElementById("title");
+      var machinePill = document.getElementById("machine-pill");
+      var updatedPill = document.getElementById("updated-pill");
+      var errorBanner = document.getElementById("error-banner");
+      var customizePanel = document.getElementById("customize-panel");
+      var toggleGrid = document.getElementById("toggle-grid");
+      var groupsRoot = document.getElementById("groups");
+      var latestSnapshot = null;
+      var visibility = loadVisibility();
+      var refreshTimer = null;
+
+      bindEvents();
+      refresh();
+
+      function bindEvents() {
+        var toggleCustomizeButton = document.getElementById("toggle-customize");
+        var showAllButton = document.getElementById("show-all");
+        var resetViewButton = document.getElementById("reset-view");
+
+        if (toggleCustomizeButton) {
+          toggleCustomizeButton.addEventListener("click", function () {
+            customizePanel.hidden = !customizePanel.hidden;
+          });
+        }
+
+        if (showAllButton) {
+          showAllButton.addEventListener("click", function () {
+            if (!latestSnapshot) {
+              return;
+            }
+
+            visibility = {};
+            latestSnapshot.metrics.forEach(function (metric) {
+              visibility[metric.key] = true;
+            });
+            persistVisibility();
+            render(latestSnapshot);
+          });
+        }
+
+        if (resetViewButton) {
+          resetViewButton.addEventListener("click", function () {
+            visibility = {};
+            persistVisibility();
+            if (latestSnapshot) {
+              render(latestSnapshot);
+            }
+          });
+        }
+
+        window.addEventListener("error", function (event) {
+          showError("Dashboard script error: " + event.message);
+        });
+      }
+
+      function refresh() {
+        fetch("/api/metrics", { cache: "no-store" })
+          .then(function (response) {
+            if (!response.ok) {
+              throw new Error("HTTP " + response.status);
+            }
+
+            return response.json();
+          })
+          .then(function (snapshot) {
+            latestSnapshot = snapshot;
+            clearError();
+            render(snapshot);
+            scheduleRefresh(snapshot.refreshIntervalMs || 2500);
+          })
+          .catch(function () {
+            updatedPill.textContent = "Reconnect failed";
+            groupsRoot.innerHTML = "<div class=\"empty\">The dashboard could not reach the local PC right now.<br>Make sure the app is still running and the phone is on the same network.</div>";
+            scheduleRefresh(3500);
+          });
+      }
+
+      function scheduleRefresh(delay) {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refresh, delay);
+      }
+
+      function render(snapshot) {
+        title.textContent = snapshot.machineName + " Dashboard";
+        machinePill.textContent = snapshot.lanUrl || snapshot.localUrl;
+        updatedPill.textContent = "Updated " + formatTime(snapshot.generatedAtUtc);
+
+        renderToggleGrid(snapshot.metrics);
+
+        var grouped = {};
+        snapshot.metrics.forEach(function (metric) {
+          if (!isVisible(metric)) {
+            return;
+          }
+
+          if (!grouped[metric.group]) {
+            grouped[metric.group] = [];
+          }
+
+          grouped[metric.group].push(metric);
+        });
+
+        var groupNames = Object.keys(grouped);
+        if (groupNames.length === 0) {
+          groupsRoot.innerHTML = "<div class=\"empty\">No metrics are selected right now.<br>Open <strong>Customize View</strong> and turn on the cards you want.</div>";
+          return;
+        }
+
+        groupsRoot.innerHTML = "";
+        groupNames.forEach(function (groupName) {
+          var section = document.createElement("section");
+          section.className = "group";
+
+          var header = document.createElement("h2");
+          header.textContent = groupName;
+          section.appendChild(header);
+
+          var grid = document.createElement("div");
+          grid.className = "metric-grid";
+
+          grouped[groupName].forEach(function (metric) {
+            var card = document.createElement("article");
+            card.className = "metric";
+
+            var label = document.createElement("div");
+            label.className = "metric-label";
+            label.textContent = metric.label;
+
+            var value = document.createElement("div");
+            value.className = "metric-value " + classifyValue(metric.value);
+            value.textContent = metric.available && metric.value ? metric.value : "Unavailable";
+
+            card.appendChild(label);
+            card.appendChild(value);
+            grid.appendChild(card);
+          });
+
+          section.appendChild(grid);
+          groupsRoot.appendChild(section);
+        });
+      }
+
+      function renderToggleGrid(metrics) {
+        toggleGrid.innerHTML = "";
+
+        metrics.forEach(function (metric) {
+          var wrapper = document.createElement("label");
+          wrapper.className = "toggle";
+
+          var checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = isVisible(metric);
+          checkbox.addEventListener("change", function () {
+            visibility[metric.key] = checkbox.checked;
+            persistVisibility();
+            if (latestSnapshot) {
+              render(latestSnapshot);
+            }
+          });
+
+          var label = document.createElement("span");
+          label.textContent = metric.label;
+
+          wrapper.appendChild(checkbox);
+          wrapper.appendChild(label);
+          toggleGrid.appendChild(wrapper);
+        });
+      }
+
+      function isVisible(metric) {
+        if (Object.prototype.hasOwnProperty.call(visibility, metric.key)) {
+          return !!visibility[metric.key];
+        }
+
+        return !!metric.defaultVisible;
+      }
+
+      function loadVisibility() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : {};
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function persistVisibility() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(visibility));
+      }
+
+      function showError(message) {
+        if (!errorBanner) {
+          return;
+        }
+
+        errorBanner.hidden = false;
+        errorBanner.textContent = message;
+      }
+
+      function clearError() {
+        if (!errorBanner) {
+          return;
+        }
+
+        errorBanner.hidden = true;
+        errorBanner.textContent = "";
+      }
+
+      function formatTime(value) {
+        var date = new Date(value);
+        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
+
+      function classifyValue(value) {
+        if (!value) {
+          return "neutral";
+        }
+
+        var match = /(-?\d+(\.\d+)?)/.exec(value);
+        var numeric = match ? parseFloat(match[1]) : NaN;
+
+        if (isNaN(numeric)) {
+          return "neutral";
+        }
+
+        if (value.indexOf("°C") !== -1 || value.indexOf("Â°C") !== -1) {
+          if (numeric >= 85) {
+            return "hot";
+          }
+          if (numeric >= 70) {
+            return "warn";
+          }
+          if (numeric >= 55) {
+            return "good";
+          }
+        }
+
+        if (value.indexOf("%") !== -1) {
+          if (numeric >= 90) {
+            return "hot";
+          }
+          if (numeric >= 70) {
+            return "warn";
+          }
+          if (numeric <= 50) {
+            return "good";
+          }
+        }
+
+        return "neutral";
+      }
+    }());
+  </script>
+</body>
+</html>

@@ -26,6 +26,7 @@ namespace PCStatsTray
         private readonly OverlayConfig _config;
         private readonly Action<OverlayConfig> _onSave;
         private readonly Func<Size> _overlaySizeProvider;
+        private readonly Func<float> _overlayScaleProvider;
         private readonly Computer _computer;
         private readonly List<FanSensorOption> _fanSensorOptions;
 
@@ -78,12 +79,13 @@ namespace PCStatsTray
         private ModernScrollContainer? _scrollContainer;
         private readonly System.Windows.Forms.Timer _statusTimer;
 
-        public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave, Func<Size>? overlaySizeProvider = null)
+        public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave, Func<Size>? overlaySizeProvider = null, Func<float>? overlayScaleProvider = null)
         {
             _computer = computer;
             _config = config;
             _onSave = onSave;
             _overlaySizeProvider = overlaySizeProvider ?? (() => Size.Empty);
+            _overlayScaleProvider = overlayScaleProvider ?? (() => Math.Max(1f, DeviceDpi > 0 ? DeviceDpi / 96f : 1f));
             _computer.Accept(new UpdateVisitor());
             _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
             _capturedToggleAllHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
@@ -505,6 +507,38 @@ namespace PCStatsTray
 
             CommitConfig();
             _onSave(_config);
+
+            if (RefreshMarginSliderRangesAfterOverlayResize())
+            {
+                CommitConfig();
+                _onSave(_config);
+            }
+        }
+
+        private bool RefreshMarginSliderRangesAfterOverlayResize()
+        {
+            if (_horizontalMarginSlider == null || _verticalMarginSlider == null)
+            {
+                return false;
+            }
+
+            int previousHorizontal = _horizontalMarginSlider.Value;
+            int previousVertical = _verticalMarginSlider.Value;
+
+            _suspendLiveApply = true;
+            try
+            {
+                UpdateMarginSliderRanges();
+                _horizontalMarginValue.Text = $"{_horizontalMarginSlider.Value} px";
+                _verticalMarginValue.Text = $"{_verticalMarginSlider.Value} px";
+            }
+            finally
+            {
+                _suspendLiveApply = false;
+            }
+
+            return _horizontalMarginSlider.Value != previousHorizontal ||
+                   _verticalMarginSlider.Value != previousVertical;
         }
 
         private void CommitConfig()
@@ -1122,8 +1156,12 @@ namespace PCStatsTray
         {
             Rectangle workingArea = GetReferenceWorkingArea();
             Size overlaySize = _overlaySizeProvider();
-            _horizontalMarginSliderMax = Math.Max(1, workingArea.Width - overlaySize.Width);
-            _verticalMarginSliderMax = Math.Max(1, workingArea.Height - overlaySize.Height);
+            float overlayScale = Math.Max(1f, _overlayScaleProvider());
+            int horizontalTravelPixels = Math.Max(0, workingArea.Width - overlaySize.Width);
+            int verticalTravelPixels = Math.Max(0, workingArea.Height - overlaySize.Height);
+
+            _horizontalMarginSliderMax = Math.Max(1, (int)Math.Floor(horizontalTravelPixels / overlayScale));
+            _verticalMarginSliderMax = Math.Max(1, (int)Math.Floor(verticalTravelPixels / overlayScale));
 
             if (_horizontalMarginSlider != null)
             {

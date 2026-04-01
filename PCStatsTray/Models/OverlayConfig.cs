@@ -110,6 +110,8 @@ namespace PCStatsTray
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
         public int SettingsWindowHeight { get; set; } = 840;
+        public bool PhoneDashboardEnabled { get; set; }
+        public int PhoneDashboardPort { get; set; } = 4587;
         public string CpuFanSensorKey { get; set; } = string.Empty;
         public string GpuFanSensorKey { get; set; } = string.Empty;
         public string CaseFanSensorKey { get; set; } = string.Empty;
@@ -200,6 +202,14 @@ namespace PCStatsTray
                 SettingsHotkeyDisplay = "Ctrl+Alt+Shift+F12";
                 SettingsHotkeyModifiers = DefaultHotkeyModifiers;
                 SettingsHotkeyVk = 0x7B;
+            }
+        }
+
+        public void NormalizeDashboard()
+        {
+            if (PhoneDashboardPort is < 1024 or > 65535)
+            {
+                PhoneDashboardPort = 4587;
             }
         }
 
