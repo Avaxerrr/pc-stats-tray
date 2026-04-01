@@ -129,7 +129,9 @@
   }
 
   function refresh() {
-    setStatus("connecting", "[ CONNECTING... ]");
+    if (!latestSnapshot) {
+      setStatus("connecting", "[ CONNECTING... ]");
+    }
 
     fetchWithTimeout("/api/metrics", 3500)
       .then(function (response) {

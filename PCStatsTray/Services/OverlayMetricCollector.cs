@@ -16,6 +16,10 @@ namespace PCStatsTray
             double totalStorageWriteBytes = 0;
             double totalNetworkDownloadBytes = 0;
             double totalNetworkUploadBytes = 0;
+            bool sawStorageRead = false;
+            bool sawStorageWrite = false;
+            bool sawNetworkDownload = false;
+            bool sawNetworkUpload = false;
             float? batteryLevel = null;
             float? batteryPower = null;
             IHardware? ramHardware = SelectRamHardware(computer.Hardware);
@@ -38,11 +42,23 @@ namespace PCStatsTray
                         break;
 
                     case HardwareType.Storage:
-                        CollectStorageMetrics(hardware, ref hottestStorageTemp, ref busiestStorageLoad, ref totalStorageReadBytes, ref totalStorageWriteBytes);
+                        CollectStorageMetrics(
+                            hardware,
+                            ref hottestStorageTemp,
+                            ref busiestStorageLoad,
+                            ref totalStorageReadBytes,
+                            ref totalStorageWriteBytes,
+                            ref sawStorageRead,
+                            ref sawStorageWrite);
                         break;
 
                     case HardwareType.Network:
-                        CollectNetworkMetrics(hardware, ref totalNetworkDownloadBytes, ref totalNetworkUploadBytes);
+                        CollectNetworkMetrics(
+                            hardware,
+                            ref totalNetworkDownloadBytes,
+                            ref totalNetworkUploadBytes,
+                            ref sawNetworkDownload,
+                            ref sawNetworkUpload);
                         break;
 
                     case HardwareType.Battery:
@@ -66,22 +82,22 @@ namespace PCStatsTray
                 currentValues["StorageLoad"] = $"{busiestStorageLoad.Value:0}%";
             }
 
-            if (totalStorageReadBytes > 0)
+            if (sawStorageRead)
             {
                 currentValues["StorageRead"] = FormatThroughput(totalStorageReadBytes);
             }
 
-            if (totalStorageWriteBytes > 0)
+            if (sawStorageWrite)
             {
                 currentValues["StorageWrite"] = FormatThroughput(totalStorageWriteBytes);
             }
 
-            if (totalNetworkDownloadBytes > 0)
+            if (sawNetworkDownload)
             {
                 currentValues["NetworkDownload"] = FormatThroughput(totalNetworkDownloadBytes);
             }
 
-            if (totalNetworkUploadBytes > 0)
+            if (sawNetworkUpload)
             {
                 currentValues["NetworkUpload"] = FormatThroughput(totalNetworkUploadBytes);
             }
@@ -310,7 +326,9 @@ namespace PCStatsTray
             ref float? hottestStorageTemp,
             ref float? busiestStorageLoad,
             ref double totalStorageReadBytes,
-            ref double totalStorageWriteBytes)
+            ref double totalStorageWriteBytes,
+            ref bool sawStorageRead,
+            ref bool sawStorageWrite)
         {
             var tempSensors = hardware.Sensors
                 .Where(sensor => sensor.SensorType == SensorType.Temperature && sensor.Value.HasValue)
@@ -339,6 +357,7 @@ namespace PCStatsTray
                 "Read");
             if (read?.Value.HasValue == true)
             {
+                sawStorageRead = true;
                 totalStorageReadBytes += read.Value.Value;
             }
 
@@ -347,6 +366,7 @@ namespace PCStatsTray
                 "Write");
             if (write?.Value.HasValue == true)
             {
+                sawStorageWrite = true;
                 totalStorageWriteBytes += write.Value.Value;
             }
         }
@@ -354,7 +374,9 @@ namespace PCStatsTray
         private static void CollectNetworkMetrics(
             IHardware hardware,
             ref double totalNetworkDownloadBytes,
-            ref double totalNetworkUploadBytes)
+            ref double totalNetworkUploadBytes,
+            ref bool sawNetworkDownload,
+            ref bool sawNetworkUpload)
         {
             foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Throughput && sensor.Value.HasValue))
             {
@@ -362,6 +384,7 @@ namespace PCStatsTray
                     ContainsIgnoreCase(sensor.Name, "Receive") ||
                     ContainsIgnoreCase(sensor.Name, "Received"))
                 {
+                    sawNetworkDownload = true;
                     totalNetworkDownloadBytes += sensor.Value!.Value;
                     continue;
                 }
@@ -370,6 +393,7 @@ namespace PCStatsTray
                     ContainsIgnoreCase(sensor.Name, "Transmit") ||
                     ContainsIgnoreCase(sensor.Name, "Sent"))
                 {
+                    sawNetworkUpload = true;
                     totalNetworkUploadBytes += sensor.Value!.Value;
                 }
             }
