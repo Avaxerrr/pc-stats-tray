@@ -690,6 +690,7 @@ html:not(.dark) .icon-sun {
   align-items: flex-end;
   justify-content: space-between;
   gap: 0.85rem;
+  min-width: 0;
 }
 
 .metric-bar,
@@ -699,14 +700,22 @@ html:not(.dark) .icon-sun {
 }
 
 .metric-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   letter-spacing: 0.08em;
 }
 
 .metric-spark {
+  flex: 0 1 auto;
   letter-spacing: -0.08em;
   opacity: 0.8;
   text-align: right;
-  min-width: 4.8rem;
+  min-width: 0;
+  max-width: 4.8rem;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .bar-empty {
@@ -816,6 +825,78 @@ html:not(.dark) .icon-sun {
 
   .metric-value {
     font-size: 1.7rem;
+  }
+}
+
+@media (max-width: 639px) {
+  body::before,
+  .scanline-anim {
+    display: none;
+  }
+
+  body {
+    background: var(--bg);
+  }
+
+  .hero-panel {
+    backdrop-filter: none;
+  }
+
+  .metric-good,
+  .metric-warn,
+  .metric-hot,
+  .metric-cyan,
+  .glow-text-green,
+  .glow-text-cyan,
+  .glow-text-yellow,
+  .glow-text-red {
+    text-shadow: none !important;
+  }
+
+  .status-live,
+  .status-offline,
+  .status-warn,
+  .card-enter,
+  .animate-console-blink {
+    animation: none !important;
+  }
+
+  .hero-panel,
+  .routing-panel,
+  .toggle-surface,
+  .group-card,
+  .cli-button {
+    box-shadow: none !important;
+  }
+
+  .group-grid {
+    gap: 0.7rem;
+  }
+
+  .group-card {
+    min-height: 8.15rem;
+    padding: 0.82rem;
+  }
+
+  .card-value-shell {
+    gap: 0.55rem;
+  }
+
+  .metric-value {
+    font-size: 1.28rem;
+  }
+
+  .metric-visual {
+    gap: 0.45rem;
+  }
+
+  .metric-bar,
+  .metric-spark {
+    font-size: 0.62rem;
+  }
+
+  .metric-spark {
+    max-width: 3.9rem;
   }
 }
 
