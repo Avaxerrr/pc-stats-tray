@@ -6,7 +6,7 @@ namespace PCStatsTray.Tests
     public class DashboardSnapshotBuilderTests
     {
         [TestMethod]
-        public void Build_UsesConfiguredMetricsAndMarksUnavailableValues()
+        public void Build_UsesDashboardCatalogInsteadOfOverlaySelection()
         {
             var config = new OverlayConfig
             {
@@ -21,10 +21,12 @@ namespace PCStatsTray.Tests
                 config,
                 new Dictionary<string, string>
                 {
-                    ["CpuTemp"] = "72°C"
+                    ["CpuTemp"] = "72°C",
+                    ["GpuLoad"] = "91%",
+                    ["CpuClock"] = "5200 MHz"
                 });
 
-            Assert.AreEqual(OverlayConfig.DefaultMetrics().Count, snapshot.Metrics.Count);
+            Assert.AreEqual(3, snapshot.Metrics.Count);
 
             var cpuTemp = snapshot.Metrics.Single(metric => metric.Key == "CpuTemp");
             Assert.AreEqual("CPU", cpuTemp.Group);
@@ -34,9 +36,12 @@ namespace PCStatsTray.Tests
 
             var gpuLoad = snapshot.Metrics.Single(metric => metric.Key == "GpuLoad");
             Assert.AreEqual("GPU", gpuLoad.Group);
-            Assert.IsNull(gpuLoad.Value);
-            Assert.IsFalse(gpuLoad.Available);
-            Assert.IsFalse(gpuLoad.DefaultVisible);
+            Assert.AreEqual("91%", gpuLoad.Value);
+            Assert.IsTrue(gpuLoad.Available);
+            Assert.IsTrue(gpuLoad.DefaultVisible);
+
+            var cpuClock = snapshot.Metrics.Single(metric => metric.Key == "CpuClock");
+            Assert.IsFalse(cpuClock.DefaultVisible);
         }
     }
 }

@@ -13,17 +13,16 @@ namespace PCStatsTray
 
         internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues)
         {
-            config.NormalizeMetrics();
-
-            var metrics = config.Metrics
+            var metrics = DashboardMetricCatalog.GetDefinitions()
+                .Where(metric => currentValues.ContainsKey(metric.Key))
                 .Select(metric => new DashboardMetricSnapshot
                 {
                     Key = metric.Key,
                     Label = metric.Label,
-                    Group = OverlaySettingsOptionHelper.GetMetricGroupLabel(metric.Key),
+                    Group = metric.Group,
                     Value = currentValues.TryGetValue(metric.Key, out string? value) ? value : null,
-                    Available = currentValues.ContainsKey(metric.Key),
-                    DefaultVisible = metric.Enabled
+                    Available = true,
+                    DefaultVisible = metric.DefaultVisible
                 })
                 .ToList();
 
