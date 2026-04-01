@@ -11,18 +11,39 @@ PC Stats Tray is a small Windows app that shows hardware stats in simple places 
 - in the tray icon
 - on the desktop
 - inside games, if you want that
+- in a browser on your phone or another device on your local network
 
 If you want a lightweight monitor instead of a big dashboard always open, this is what the app is for.
 
+## What's new in 0.5.0
+
+- local LAN dashboard for phone and browser viewing
+- read-only local metrics API
+- richer curated dashboard metric catalog, separate from the desktop OSD metric list
+- dynamic OSD margin range based on monitor size, DPI, and overlay size
+- safer default hotkeys with fewer common shortcut conflicts
+- persistent sensor details window size, position, and sidebar split
+
 ## What it looks like
 
-### Desktop overlay
-
-![Desktop overlay](PCStatsTray/assets/screenshots/overlay-screenshot.png)
-
-### OSD settings
-
-![OSD settings](PCStatsTray/assets/screenshots/OSD-settings.png)
+<table>
+  <tr>
+    <td align="center" colspan="2">
+      <strong>LAN dashboard</strong><br><br>
+      <img src="PCStatsTray/assets/screenshots/dasbhoard.png" alt="LAN dashboard" width="760">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Desktop overlay</strong><br><br>
+      <img src="PCStatsTray/assets/screenshots/overlay-screenshot.png" alt="Desktop overlay" height="430">
+    </td>
+    <td align="center" width="50%">
+      <strong>OSD settings</strong><br><br>
+      <img src="PCStatsTray/assets/screenshots/OSD-settings.png" alt="OSD settings" height="430">
+    </td>
+  </tr>
+</table>
 
 ## Start here
 
@@ -43,6 +64,8 @@ What these mean:
 
 If you only want the tray icon and desktop overlay, you do not need RTSS.
 
+If you only want the LAN dashboard, you also do not need RTSS.
+
 ## Quick setup
 
 1. Install `PawnIO` from the official site if you want full CPU temperature, clock, and power sensors.
@@ -53,7 +76,31 @@ If you only want the tray icon and desktop overlay, you do not need RTSS.
 6. Choose the metrics you want.
 7. Turn on `Desktop OSD` if you want stats on your desktop.
 8. Turn on `RTSS OSD (Games)` only if RTSS is installed and open.
-9. Changes apply immediately.
+9. Turn on `Enable LAN Dashboard` in the tray menu if you want phone/browser viewing.
+10. Changes apply immediately.
+
+## LAN dashboard and local API
+
+Do this:
+
+1. Run `PCStatsTray.exe`.
+2. Right-click the tray icon.
+3. Turn on `Enable LAN Dashboard`.
+4. Use `Open LAN Dashboard` on this PC, or `Copy Dashboard URL` to open it from your phone on the same network.
+5. Open the copied URL in your browser.
+
+Useful endpoints:
+
+- `/` dashboard UI
+- `/api/metrics` current metric snapshot as JSON
+- `/api/health` simple health check
+
+Notes:
+
+- the dashboard and API are read-only
+- they are intended for trusted local networks
+- the dashboard shows a broader curated metric set than the desktop OSD by default
+- the dashboard remembers hidden and shown metrics per browser
 
 ## First run and CPU sensors
 
@@ -101,8 +148,11 @@ Install that first, then try again.
 - show a live temperature in the tray icon
 - show a desktop OSD with the metrics you choose
 - send the same metrics to RTSS for supported in-game overlays
+- serve a local LAN dashboard for phone and browser viewing
+- expose a read-only local JSON API for the current metric snapshot
 - let you change font, size, shadow, outline, position, and visibility
 - support hotkeys for toggling the OSD and opening settings
+- remember the sensor details window layout between launches
 
 ## Technical details
 

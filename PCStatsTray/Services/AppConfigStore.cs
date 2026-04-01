@@ -23,6 +23,8 @@ namespace PCStatsTray
                 var config = LoadFullConfig(path);
                 if (config?.Overlay != null)
                 {
+                    config.Overlay.NormalizeDashboard();
+                    config.Overlay.NormalizeHotkeys();
                     config.Overlay.NormalizeMetrics();
                     return config.Overlay;
                 }
@@ -32,6 +34,8 @@ namespace PCStatsTray
             }
 
             var overlay = new OverlayConfig();
+            overlay.NormalizeDashboard();
+            overlay.NormalizeHotkeys();
             overlay.NormalizeMetrics();
             return overlay;
         }
@@ -40,6 +44,8 @@ namespace PCStatsTray
         {
             try
             {
+                overlay.NormalizeDashboard();
+                overlay.NormalizeHotkeys();
                 overlay.NormalizeMetrics();
                 var config = LoadFullConfig(path) ?? new StoredAppConfig();
                 config.Overlay = overlay;
@@ -90,6 +96,32 @@ namespace PCStatsTray
             }
         }
 
+        public static DetailsWindowLayout LoadDetailsWindowLayout(string path)
+        {
+            try
+            {
+                var layout = LoadFullConfig(path)?.DetailsWindow ?? new DetailsWindowLayout();
+                return NormalizeDetailsWindowLayout(layout);
+            }
+            catch
+            {
+                return new DetailsWindowLayout();
+            }
+        }
+
+        public static void SaveDetailsWindowLayout(string path, DetailsWindowLayout layout)
+        {
+            try
+            {
+                var config = LoadFullConfig(path) ?? new StoredAppConfig();
+                config.DetailsWindow = NormalizeDetailsWindowLayout(layout);
+                SaveFullConfig(path, config);
+            }
+            catch
+            {
+            }
+        }
+
         public static void SaveSuppressPawnIoPrompt(string path, bool suppress)
         {
             try
@@ -118,6 +150,14 @@ namespace PCStatsTray
         {
             string json = JsonSerializer.Serialize(config, JsonOptions);
             File.WriteAllText(path, json);
+        }
+
+        private static DetailsWindowLayout NormalizeDetailsWindowLayout(DetailsWindowLayout layout)
+        {
+            layout.Width = Math.Max(600, layout.Width);
+            layout.Height = Math.Max(350, layout.Height);
+            layout.SidebarWidth = Math.Clamp(layout.SidebarWidth, 140, 500);
+            return layout;
         }
     }
 }
