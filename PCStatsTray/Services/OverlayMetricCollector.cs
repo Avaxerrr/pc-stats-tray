@@ -7,7 +7,7 @@ namespace PCStatsTray
 {
     internal static class OverlayMetricCollector
     {
-        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config)
+        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config, bool useOverlayDisplayModes = true)
         {
             var currentValues = new Dictionary<string, string>();
             float? hottestStorageTemp = null;
@@ -18,6 +18,7 @@ namespace PCStatsTray
             double totalNetworkUploadBytes = 0;
             float? batteryLevel = null;
             float? batteryPower = null;
+            IHardware? ramHardware = SelectRamHardware(computer.Hardware);
 
             foreach (var hardware in computer.Hardware)
             {
@@ -34,7 +35,6 @@ namespace PCStatsTray
                         break;
 
                     case HardwareType.Memory:
-                        CollectRamMetrics(hardware, config, currentValues);
                         break;
 
                     case HardwareType.Storage:
@@ -49,6 +49,11 @@ namespace PCStatsTray
                         CollectBatteryMetrics(hardware, ref batteryLevel, ref batteryPower);
                         break;
                 }
+            }
+
+            if (ramHardware != null)
+            {
+                CollectRamMetrics(ramHardware, config, currentValues, useOverlayDisplayModes);
             }
 
             if (hottestStorageTemp.HasValue)
@@ -233,7 +238,7 @@ namespace PCStatsTray
             }
         }
 
-        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues)
+        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues, bool useOverlayDisplayModes)
         {
             var used = FindSensor(hardware.Sensors,
                 SensorType.Data,
@@ -248,7 +253,8 @@ namespace PCStatsTray
 
             float usedGb = used.Value!.Value;
             float? availableGb = available?.Value.HasValue == true ? available.Value.Value : null;
-            currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, config.ShowRamAsPercentage());
+            bool showRamAsPercentage = useOverlayDisplayModes && config.ShowRamAsPercentage();
+            currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, showRamAsPercentage);
 
             if (availableGb.HasValue)
             {
@@ -269,6 +275,34 @@ namespace PCStatsTray
                     currentValues["RamLoad"] = $"{load.Value.Value:0}%";
                 }
             }
+        }
+
+        internal static IHardware? SelectRamHardware(IEnumerable<IHardware> hardwareItems)
+        {
+            return hardwareItems
+                .Where(hardware => hardware.HardwareType == HardwareType.Memory)
+                .OrderBy(hardware => GetMemoryHardwarePriority(hardware.Name))
+                .FirstOrDefault();
+        }
+
+        internal static int GetMemoryHardwarePriority(string? hardwareName)
+        {
+            if (string.IsNullOrWhiteSpace(hardwareName))
+            {
+                return 1;
+            }
+
+            if (ContainsIgnoreCase(hardwareName, "Total") || ContainsIgnoreCase(hardwareName, "Physical"))
+            {
+                return 0;
+            }
+
+            if (ContainsIgnoreCase(hardwareName, "Virtual"))
+            {
+                return 2;
+            }
+
+            return 1;
         }
 
         private static void CollectStorageMetrics(

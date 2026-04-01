@@ -8,7 +8,7 @@ namespace PCStatsTray
     {
         public static DashboardSnapshot Build(Computer computer, OverlayConfig config, int refreshIntervalMs)
         {
-            return Build(config, OverlayMetricCollector.Collect(computer, config), refreshIntervalMs);
+            return Build(config, OverlayMetricCollector.Collect(computer, config, useOverlayDisplayModes: false), refreshIntervalMs);
         }
 
         internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, int refreshIntervalMs)

@@ -123,7 +123,7 @@ namespace PCStatsTray
         {
             new("CpuTemp",  "CPU Temp",  true),
             new("CpuLoad",  "CPU Load",  true),
-            new("CpuClock", "CPU Clock", false),
+            new("CpuClock", "CPU Peak Clock", false),
             new("CpuPower", "CPU Power", false),
             new("CpuFan",   "CPU Fan",   false),
             new("GpuTemp",  "GPU Temp",  true),
