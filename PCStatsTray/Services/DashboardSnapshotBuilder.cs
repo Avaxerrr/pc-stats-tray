@@ -1,10 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Management;
 using LibreHardwareMonitor.Hardware;
 
 namespace PCStatsTray
 {
+    internal sealed class PhysicalMemoryModuleInfo
+    {
+        public string PartNumber { get; init; } = string.Empty;
+        public string Manufacturer { get; init; } = string.Empty;
+        public ulong CapacityBytes { get; init; }
+        public uint? ConfiguredClockSpeedMHz { get; init; }
+    }
+
     internal sealed class DashboardMetricValue
     {
         public string Key { get; init; } = string.Empty;
@@ -17,6 +26,12 @@ namespace PCStatsTray
 
     internal static class DashboardSnapshotBuilder
     {
+        private const string DefaultRamSourceName = "System Memory";
+        private static readonly object RamSourceCacheLock = new();
+        private static readonly TimeSpan RamSourceCacheDuration = TimeSpan.FromMinutes(15);
+        private static string? s_cachedRamSourceName;
+        private static DateTimeOffset s_cachedRamSourceNameExpiresUtc = DateTimeOffset.MinValue;
+
         private static readonly string[] DeviceSpecificMetricKeys =
         {
             "StorageTemp",
@@ -89,6 +104,7 @@ namespace PCStatsTray
         private static IReadOnlyDictionary<string, string> BuildRuntimeSourceNames(Computer computer)
         {
             var sourceNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            IHardware? ramHardware = null;
 
             foreach (var hardware in computer.Hardware)
             {
@@ -107,7 +123,16 @@ namespace PCStatsTray
                     case HardwareType.Battery:
                         AssignBatteryMetricSources(sourceNames, hardware);
                         break;
+
+                    case HardwareType.Memory:
+                        ramHardware ??= hardware;
+                        break;
                 }
+            }
+
+            if (ramHardware != null)
+            {
+                AssignRamMetricSources(sourceNames, ramHardware);
             }
 
             return sourceNames;
@@ -346,6 +371,126 @@ namespace PCStatsTray
             }
         }
 
+        private static void AssignRamMetricSources(IDictionary<string, string> sourceNames, IHardware hardware)
+        {
+            string sourceName = ResolveRamSourceName(hardware);
+
+            var used = FindPreferredSensor(hardware.Sensors, SensorType.Data, "Used");
+            var available = FindPreferredSensor(hardware.Sensors, SensorType.Data, "Available");
+            var load = FindPreferredSensor(hardware.Sensors, SensorType.Load, "Memory");
+
+            if (used?.Value.HasValue == true)
+            {
+                sourceNames["RamUsage"] = sourceName;
+            }
+
+            if (available?.Value.HasValue == true)
+            {
+                sourceNames["RamAvailable"] = sourceName;
+                sourceNames["RamLoad"] = sourceName;
+                return;
+            }
+
+            if (load?.Value.HasValue == true)
+            {
+                sourceNames["RamLoad"] = sourceName;
+            }
+        }
+
+        private static string ResolveRamSourceName(IHardware hardware)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+
+            lock (RamSourceCacheLock)
+            {
+                if (!string.IsNullOrWhiteSpace(s_cachedRamSourceName) &&
+                    s_cachedRamSourceNameExpiresUtc > now)
+                {
+                    return s_cachedRamSourceName!;
+                }
+            }
+
+            string sourceName = BuildMemorySourceName(LoadPhysicalMemoryModules());
+            if (string.IsNullOrWhiteSpace(sourceName))
+            {
+                sourceName = NormalizeSourceName(hardware.Name, DefaultRamSourceName);
+            }
+
+            lock (RamSourceCacheLock)
+            {
+                s_cachedRamSourceName = sourceName;
+                s_cachedRamSourceNameExpiresUtc = now.Add(RamSourceCacheDuration);
+            }
+
+            return sourceName;
+        }
+
+        internal static string BuildMemorySourceName(IEnumerable<PhysicalMemoryModuleInfo> modules)
+        {
+            var moduleList = modules
+                .Where(module => module != null)
+                .ToList();
+            if (moduleList.Count == 0)
+            {
+                return DefaultRamSourceName;
+            }
+
+            ulong totalCapacityBytes = moduleList.Aggregate<PhysicalMemoryModuleInfo, ulong>(0, (total, module) => total + module.CapacityBytes);
+            string capacitySummary = FormatMemoryCapacity(totalCapacityBytes);
+
+            var names = moduleList
+                .Select(GetPreferredMemoryModuleName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count == 0)
+            {
+                return moduleList.Count == 1
+                    ? capacitySummary
+                    : $"{capacitySummary} ({moduleList.Count} modules)";
+            }
+
+            if (names.Count == 1)
+            {
+                return moduleList.Count == 1
+                    ? $"{capacitySummary} ({names[0]})"
+                    : $"{capacitySummary} ({moduleList.Count}x {names[0]})";
+            }
+
+            string joinedNames = names.Count <= 2
+                ? string.Join(" + ", names)
+                : $"{moduleList.Count} modules";
+
+            return $"{capacitySummary} ({joinedNames})";
+        }
+
+        private static IReadOnlyList<PhysicalMemoryModuleInfo> LoadPhysicalMemoryModules()
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(
+                    "SELECT Manufacturer, PartNumber, Capacity, ConfiguredClockSpeed FROM Win32_PhysicalMemory");
+                using ManagementObjectCollection results = searcher.Get();
+
+                return results
+                    .OfType<ManagementObject>()
+                    .Select(result => new PhysicalMemoryModuleInfo
+                    {
+                        Manufacturer = NormalizeManagementString(result["Manufacturer"]),
+                        PartNumber = NormalizeManagementString(result["PartNumber"]),
+                        CapacityBytes = TryReadUInt64(result["Capacity"]),
+                        ConfiguredClockSpeedMHz = TryReadUInt32(result["ConfiguredClockSpeed"])
+                    })
+                    .Where(module => module.CapacityBytes > 0 || !string.IsNullOrWhiteSpace(module.PartNumber))
+                    .ToList();
+            }
+            catch
+            {
+                return Array.Empty<PhysicalMemoryModuleInfo>();
+            }
+        }
+
         private static DashboardMetricValue CreateDeviceMetricValue(string baseKey, string sourceKey, string sourceName, string value)
         {
             return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value, defaultVisibleOverride: null);
@@ -380,6 +525,63 @@ namespace PCStatsTray
         private static string NormalizeSourceName(string? sourceName, string fallbackName)
         {
             return string.IsNullOrWhiteSpace(sourceName) ? fallbackName : sourceName.Trim();
+        }
+
+        private static string GetPreferredMemoryModuleName(PhysicalMemoryModuleInfo module)
+        {
+            string partNumber = module.PartNumber.Trim();
+            if (!string.IsNullOrWhiteSpace(partNumber))
+            {
+                return partNumber;
+            }
+
+            string manufacturer = module.Manufacturer.Trim();
+            return string.IsNullOrWhiteSpace(manufacturer) ? string.Empty : manufacturer;
+        }
+
+        private static string FormatMemoryCapacity(ulong bytes)
+        {
+            if (bytes == 0)
+            {
+                return DefaultRamSourceName;
+            }
+
+            double gibibytes = bytes / (1024d * 1024d * 1024d);
+            if (gibibytes >= 10d)
+            {
+                return $"{Math.Round(gibibytes):0} GB";
+            }
+
+            return $"{gibibytes:0.#} GB";
+        }
+
+        private static string NormalizeManagementString(object? value)
+        {
+            return value?.ToString()?.Trim() ?? string.Empty;
+        }
+
+        private static ulong TryReadUInt64(object? value)
+        {
+            try
+            {
+                return value == null ? 0UL : Convert.ToUInt64(value);
+            }
+            catch
+            {
+                return 0UL;
+            }
+        }
+
+        private static uint? TryReadUInt32(object? value)
+        {
+            try
+            {
+                return value == null ? null : Convert.ToUInt32(value);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static string BuildUniqueSourceName(

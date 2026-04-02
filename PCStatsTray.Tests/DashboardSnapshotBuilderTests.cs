@@ -205,5 +205,47 @@ namespace PCStatsTray.Tests
             Assert.AreEqual("NVIDIA GeForce RTX 4060 Laptop GPU", snapshot.Metrics.Single(metric => metric.Key == "GpuTemp").SourceName);
             Assert.AreEqual("Internal Battery", snapshot.Metrics.Single(metric => metric.Key == "BatteryLevel").SourceName);
         }
+
+        [TestMethod]
+        public void BuildMemorySourceName_UsesActualModulePartNumbers()
+        {
+            string sourceName = DashboardSnapshotBuilder.BuildMemorySourceName(
+                new[]
+                {
+                    new PhysicalMemoryModuleInfo
+                    {
+                        PartNumber = "LD4AS016G-3200ST",
+                        CapacityBytes = 17179869184
+                    },
+                    new PhysicalMemoryModuleInfo
+                    {
+                        PartNumber = "CT16G4SFD832A.16FE1",
+                        CapacityBytes = 17179869184
+                    }
+                });
+
+            Assert.AreEqual("32 GB (LD4AS016G-3200ST + CT16G4SFD832A.16FE1)", sourceName);
+        }
+
+        [TestMethod]
+        public void BuildMemorySourceName_CollapsesIdenticalModulesIntoCount()
+        {
+            string sourceName = DashboardSnapshotBuilder.BuildMemorySourceName(
+                new[]
+                {
+                    new PhysicalMemoryModuleInfo
+                    {
+                        PartNumber = "CT16G4SFD832A.16FE1",
+                        CapacityBytes = 17179869184
+                    },
+                    new PhysicalMemoryModuleInfo
+                    {
+                        PartNumber = "CT16G4SFD832A.16FE1",
+                        CapacityBytes = 17179869184
+                    }
+                });
+
+            Assert.AreEqual("32 GB (2x CT16G4SFD832A.16FE1)", sourceName);
+        }
     }
 }
