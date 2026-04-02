@@ -300,44 +300,65 @@
     }
 
     els.toggleGrid.innerHTML = "";
+    var grouped = groupMetrics(metrics);
 
-    metrics.forEach(function (metric) {
-      var wrapper = document.createElement("label");
-      wrapper.className = "toggle-card";
+    Object.keys(grouped).forEach(function (groupName) {
+      var section = document.createElement("section");
+      section.className = "routing-group";
 
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = isVisible(metric);
-      input.addEventListener("change", function () {
-        visibility[metric.key] = input.checked;
-        persistVisibility();
-        if (latestSnapshot) {
-          fullRender(latestSnapshot);
-        }
+      var heading = document.createElement("div");
+      heading.className = "routing-group-heading";
+      heading.textContent = "[ " + codeLabel(groupName) + " ]";
+
+      var grid = document.createElement("div");
+      grid.className = "routing-group-grid";
+
+      grouped[groupName].forEach(function (metric) {
+        grid.appendChild(createToggleCard(metric));
       });
 
-      var surface = document.createElement("span");
-      surface.className = "toggle-surface";
-
-      var label = document.createElement("span");
-      label.className = "toggle-label";
-      label.textContent = buildToggleLabel(metric);
-
-      var state = document.createElement("span");
-      state.className = "toggle-state";
-      state.textContent = input.checked ? "[x]" : "[ ]";
-
-      input.addEventListener("change", function () {
-        state.textContent = input.checked ? "[x]" : "[ ]";
-      });
-
-      surface.appendChild(label);
-      surface.appendChild(state);
-      wrapper.appendChild(input);
-      wrapper.appendChild(surface);
-
-      els.toggleGrid.appendChild(wrapper);
+      section.appendChild(heading);
+      section.appendChild(grid);
+      els.toggleGrid.appendChild(section);
     });
+  }
+
+  function createToggleCard(metric) {
+    var wrapper = document.createElement("label");
+    wrapper.className = "toggle-card";
+
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = isVisible(metric);
+    input.addEventListener("change", function () {
+      visibility[metric.key] = input.checked;
+      persistVisibility();
+      if (latestSnapshot) {
+        fullRender(latestSnapshot);
+      }
+    });
+
+    var surface = document.createElement("span");
+    surface.className = "toggle-surface";
+
+    var label = document.createElement("span");
+    label.className = "toggle-label";
+    label.textContent = buildToggleLabel(metric);
+
+    var state = document.createElement("span");
+    state.className = "toggle-state";
+    state.textContent = input.checked ? "[x]" : "[ ]";
+
+    input.addEventListener("change", function () {
+      state.textContent = input.checked ? "[x]" : "[ ]";
+    });
+
+    surface.appendChild(label);
+    surface.appendChild(state);
+    wrapper.appendChild(input);
+    wrapper.appendChild(surface);
+
+    return wrapper;
   }
 
   function renderEmptyState(title, copyHtml) {
