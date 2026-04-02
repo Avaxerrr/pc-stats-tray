@@ -321,7 +321,7 @@
 
       var label = document.createElement("span");
       label.className = "toggle-label";
-      label.textContent = codeLabel(metric.label);
+      label.textContent = buildToggleLabel(metric);
 
       var state = document.createElement("span");
       state.className = "toggle-state";
@@ -405,6 +405,9 @@
     card.style.animationDelay = String(animationIndex * 0.04) + "s";
 
     card.innerHTML =
+      (metric.sourceName
+        ? "<div class=\"card-source\" title=\"" + escapeAttribute(metric.sourceName) + "\">" + escapeHtml(metric.sourceName) + "</div>"
+        : "") +
       "<div class=\"card-code\" title=\"" + escapeAttribute(metric.label) + "\">&gt; " + escapeHtml(codeLabel(metric.label)) + "</div>" +
       "<div class=\"card-value-shell\">" +
       "<div id=\"val-" + escapeAttribute(metric.key) + "\" class=\"metric-value " + analysis.valueClass + "\">" +
@@ -595,6 +598,14 @@
       .replace(/_+/g, "_")
       .replace(/^_+|_+$/g, "")
       .toUpperCase();
+  }
+
+  function buildToggleLabel(metric) {
+    if (metric && metric.sourceName) {
+      return codeLabel(metric.sourceName) + " // " + codeLabel(metric.label);
+    }
+
+    return codeLabel(metric.label);
   }
 
   function persistVisibility() {

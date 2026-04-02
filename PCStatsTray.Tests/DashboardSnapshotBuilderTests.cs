@@ -21,7 +21,7 @@ namespace PCStatsTray.Tests
                 config,
                 new Dictionary<string, string>
                 {
-                    ["CpuTemp"] = "72°C",
+                    ["CpuTemp"] = "72\u00B0C",
                     ["GpuLoad"] = "91%",
                     ["CpuClock"] = "5200 MHz",
                     ["CpuClockEffectiveAvg"] = "4100 MHz"
@@ -33,7 +33,8 @@ namespace PCStatsTray.Tests
 
             var cpuTemp = snapshot.Metrics.Single(metric => metric.Key == "CpuTemp");
             Assert.AreEqual("CPU", cpuTemp.Group);
-            Assert.AreEqual("72°C", cpuTemp.Value);
+            Assert.AreEqual("72\u00B0C", cpuTemp.Value);
+            Assert.AreEqual(string.Empty, cpuTemp.SourceName);
             Assert.IsTrue(cpuTemp.Available);
             Assert.IsTrue(cpuTemp.DefaultVisible);
 
@@ -50,6 +51,45 @@ namespace PCStatsTray.Tests
             Assert.AreEqual("CPU", effectiveClock.Group);
             Assert.AreEqual("4100 MHz", effectiveClock.Value);
             Assert.IsFalse(effectiveClock.DefaultVisible);
+        }
+
+        [TestMethod]
+        public void Build_PreservesSourceNamesForDeviceSpecificCards()
+        {
+            var snapshot = DashboardSnapshotBuilder.Build(
+                new[]
+                {
+                    new DashboardMetricValue
+                    {
+                        Key = "StorageTemp::drive0",
+                        Label = "Storage Temp",
+                        Group = "Storage",
+                        SourceName = "Samsung SSD 990 PRO",
+                        Value = "56\u00B0C",
+                        DefaultVisible = true
+                    },
+                    new DashboardMetricValue
+                    {
+                        Key = "StorageTemp::drive1",
+                        Label = "Storage Temp",
+                        Group = "Storage",
+                        SourceName = "Samsung SSD 990 PRO #2",
+                        Value = "49\u00B0C",
+                        DefaultVisible = true
+                    }
+                },
+                1000);
+
+            Assert.AreEqual(2, snapshot.Metrics.Count);
+
+            var firstDrive = snapshot.Metrics.Single(metric => metric.Key == "StorageTemp::drive0");
+            Assert.AreEqual("Storage", firstDrive.Group);
+            Assert.AreEqual("Samsung SSD 990 PRO", firstDrive.SourceName);
+            Assert.AreEqual("56\u00B0C", firstDrive.Value);
+            Assert.IsTrue(firstDrive.DefaultVisible);
+
+            var secondDrive = snapshot.Metrics.Single(metric => metric.Key == "StorageTemp::drive1");
+            Assert.AreEqual("Samsung SSD 990 PRO #2", secondDrive.SourceName);
         }
     }
 }

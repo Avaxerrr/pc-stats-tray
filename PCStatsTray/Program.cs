@@ -46,7 +46,6 @@ namespace PCStatsTray
         private static LanDashboardServer? lanDashboardServer;
         private static CpuSensorSetupStatus cpuSensorSetupStatus = new();
         private static readonly Dictionary<string, string> currentMetricValues = new();
-        private static readonly Dictionary<string, string> dashboardMetricValues = new();
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -351,7 +350,7 @@ namespace PCStatsTray
             hotkeyService?.ApplyConfig(config);
             lanDashboardServer?.ApplyConfig(config);
             RefreshCollectedMetrics();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(overlayConfig, dashboardMetricValues, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -421,7 +420,7 @@ namespace PCStatsTray
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
             RefreshCollectedMetrics();
             CaptureLatestTemperatures();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(overlayConfig, dashboardMetricValues, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
             UpdateCpuSensorSetupMenu();
             UpdateIcon();
 
@@ -437,11 +436,9 @@ namespace PCStatsTray
         {
             var raw = OverlayMetricCollector.Collect(computer, overlayConfig, useOverlayDisplayModes: false);
 
-            dashboardMetricValues.Clear();
             currentMetricValues.Clear();
             foreach (var pair in raw)
             {
-                dashboardMetricValues[pair.Key] = pair.Value;
                 currentMetricValues[pair.Key] = pair.Value;
             }
 

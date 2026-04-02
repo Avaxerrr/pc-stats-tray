@@ -608,6 +608,17 @@ html:not(.dark) .icon-sun {
   animation: fade-in 0.3s ease-out forwards;
 }
 
+.card-source {
+  margin-bottom: 0.38rem;
+  color: var(--term-cyan);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .card-code {
   margin-bottom: 0.85rem;
   padding-bottom: 0.45rem;
