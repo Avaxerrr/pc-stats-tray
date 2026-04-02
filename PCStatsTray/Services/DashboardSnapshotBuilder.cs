@@ -30,7 +30,8 @@ namespace PCStatsTray
         public static DashboardSnapshot Build(Computer computer, OverlayConfig config, int refreshIntervalMs)
         {
             var currentValues = OverlayMetricCollector.Collect(computer, config, useOverlayDisplayModes: false);
-            var metrics = BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: false);
+            var runtimeSourceNames = BuildRuntimeSourceNames(computer);
+            var metrics = BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: false, runtimeSourceNames);
             metrics.AddRange(BuildStorageMetricValues(computer));
             metrics.AddRange(BuildNetworkMetricValues(computer));
             return Build(metrics, refreshIntervalMs);
@@ -65,7 +66,8 @@ namespace PCStatsTray
 
         private static List<DashboardMetricValue> BuildStaticMetricValues(
             IReadOnlyDictionary<string, string> currentValues,
-            bool includeDeviceSpecificMetrics)
+            bool includeDeviceSpecificMetrics,
+            IReadOnlyDictionary<string, string>? sourceNameByKey = null)
         {
             return DashboardMetricCatalog.GetDefinitions()
                 .Where(metric => currentValues.ContainsKey(metric.Key))
@@ -75,11 +77,40 @@ namespace PCStatsTray
                     Key = metric.Key,
                     Label = metric.Label,
                     Group = metric.Group,
-                    SourceName = string.Empty,
+                    SourceName = sourceNameByKey != null && sourceNameByKey.TryGetValue(metric.Key, out string? sourceName)
+                        ? sourceName
+                        : string.Empty,
                     Value = currentValues.TryGetValue(metric.Key, out string? value) ? value : null,
                     DefaultVisible = metric.DefaultVisible
                 })
                 .ToList();
+        }
+
+        private static IReadOnlyDictionary<string, string> BuildRuntimeSourceNames(Computer computer)
+        {
+            var sourceNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var hardware in computer.Hardware)
+            {
+                switch (hardware.HardwareType)
+                {
+                    case HardwareType.Cpu:
+                        AssignCpuMetricSources(sourceNames, hardware);
+                        break;
+
+                    case HardwareType.GpuNvidia:
+                    case HardwareType.GpuAmd:
+                    case HardwareType.GpuIntel:
+                        AssignGpuMetricSources(sourceNames, hardware);
+                        break;
+
+                    case HardwareType.Battery:
+                        AssignBatteryMetricSources(sourceNames, hardware);
+                        break;
+                }
+            }
+
+            return sourceNames;
         }
 
         private static List<DashboardMetricValue> BuildStorageMetricValues(Computer computer)
@@ -211,6 +242,110 @@ namespace PCStatsTray
             return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value);
         }
 
+        private static void AssignCpuMetricSources(IDictionary<string, string> sourceNames, IHardware hardware)
+        {
+            string sourceName = NormalizeSourceName(hardware.Name, "CPU");
+
+            if (SelectCpuTemperatureSensor(hardware.Sensors)?.Value.HasValue == true)
+            {
+                sourceNames["CpuTemp"] = sourceName;
+            }
+
+            if (FindPreferredSensor(hardware.Sensors, SensorType.Load, "Total")?.Value.HasValue == true)
+            {
+                sourceNames["CpuLoad"] = sourceName;
+            }
+
+            if (hardware.Sensors.Any(sensor => sensor.SensorType == SensorType.Clock &&
+                                               sensor.Value.HasValue &&
+                                               IsPeakCpuClockSensor(sensor.Name)))
+            {
+                sourceNames["CpuClock"] = sourceName;
+            }
+
+            if (FindPreferredSensor(hardware.Sensors, SensorType.Clock, "Cores (Average)")?.Value.HasValue == true)
+            {
+                sourceNames["CpuClockAvg"] = sourceName;
+            }
+
+            if (FindPreferredSensor(hardware.Sensors, SensorType.Clock, "Cores (Average Effective)")?.Value.HasValue == true)
+            {
+                sourceNames["CpuClockEffectiveAvg"] = sourceName;
+            }
+
+            if (FindPreferredSensor(hardware.Sensors, SensorType.Power, "Package")?.Value.HasValue == true)
+            {
+                sourceNames["CpuPower"] = sourceName;
+            }
+        }
+
+        private static void AssignGpuMetricSources(IDictionary<string, string> sourceNames, IHardware hardware)
+        {
+            string sourceName = NormalizeSourceName(hardware.Name, "GPU");
+            var allSensors = hardware.Sensors
+                .Concat(hardware.SubHardware.SelectMany(subHardware => subHardware.Sensors))
+                .ToList();
+
+            if (FindPreferredSensor(allSensors, SensorType.Temperature, "Core")?.Value.HasValue == true)
+            {
+                sourceNames["GpuTemp"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.Temperature, "Hot Spot", "Hotspot", "Junction")?.Value.HasValue == true)
+            {
+                sourceNames["GpuHotspotTemp"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.Temperature, "Memory")?.Value.HasValue == true)
+            {
+                sourceNames["GpuMemoryTemp"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.Load, "Core")?.Value.HasValue == true)
+            {
+                sourceNames["GpuLoad"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.Clock, "Core")?.Value.HasValue == true)
+            {
+                sourceNames["GpuClock"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.Clock, "Memory")?.Value.HasValue == true)
+            {
+                sourceNames["GpuMemoryClock"] = sourceName;
+            }
+
+            if (FindPreferredSensor(allSensors, SensorType.SmallData, "Memory Used", "GPU Memory Used")?.Value.HasValue == true)
+            {
+                sourceNames["GpuVram"] = sourceName;
+            }
+
+            if (SelectGpuPowerSensor(allSensors)?.Value.HasValue == true)
+            {
+                sourceNames["GpuPower"] = sourceName;
+            }
+        }
+
+        private static void AssignBatteryMetricSources(IDictionary<string, string> sourceNames, IHardware hardware)
+        {
+            string sourceName = NormalizeSourceName(hardware.Name, "Battery");
+
+            var level = FindPreferredSensor(hardware.Sensors, SensorType.Level, "Charge", "Level")
+                ?? FindPreferredSensor(hardware.Sensors, SensorType.Load, "Charge", "Level");
+            if (level?.Value.HasValue == true)
+            {
+                sourceNames["BatteryLevel"] = sourceName;
+            }
+
+            var power = FindPreferredSensor(hardware.Sensors, SensorType.Power, "Charge", "Discharge", "Rate")
+                ?? hardware.Sensors.FirstOrDefault(sensor => sensor.SensorType == SensorType.Power && sensor.Value.HasValue);
+            if (power?.Value.HasValue == true)
+            {
+                sourceNames["BatteryPower"] = sourceName;
+            }
+        }
+
         private static DashboardMetricValue CreateDeviceMetricValue(string baseKey, string sourceKey, string sourceName, string value)
         {
             return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value, defaultVisibleOverride: null);
@@ -306,9 +441,32 @@ namespace PCStatsTray
                 .FirstOrDefault();
         }
 
+        private static ISensor? SelectCpuTemperatureSensor(IEnumerable<ISensor> sensors)
+        {
+            return FindPreferredSensor(
+                       sensors,
+                       SensorType.Temperature,
+                       "Core Max",
+                       "Package",
+                       "Tctl",
+                       "Tdie")
+                   ?? sensors.FirstOrDefault(sensor => sensor.SensorType == SensorType.Temperature && sensor.Value.HasValue);
+        }
+
         private static ISensor? SelectNetworkSensor(IEnumerable<ISensor> sensors, params string[] preferredTerms)
         {
             return FindPreferredSensor(sensors, SensorType.Throughput, preferredTerms);
+        }
+
+        private static ISensor? SelectGpuPowerSensor(IEnumerable<ISensor> sensors)
+        {
+            return FindPreferredSensor(
+                       sensors,
+                       SensorType.Power,
+                       "Board",
+                       "Total",
+                       "Package")
+                   ?? sensors.FirstOrDefault(sensor => sensor.SensorType == SensorType.Power && sensor.Value.HasValue);
         }
 
         private static bool IsPreferredNetworkSource(string sourceName)
@@ -337,6 +495,16 @@ namespace PCStatsTray
         private static bool ContainsIgnoreCase(string text, string value)
         {
             return text.Contains(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPeakCpuClockSensor(string sensorName)
+        {
+            if (!ContainsIgnoreCase(sensorName, "Core #"))
+            {
+                return false;
+            }
+
+            return !ContainsIgnoreCase(sensorName, "Effective");
         }
 
         private static bool IsStorageTemperatureThresholdSensor(string? sensorName)

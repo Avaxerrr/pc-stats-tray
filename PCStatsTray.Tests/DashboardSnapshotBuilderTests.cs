@@ -164,5 +164,46 @@ namespace PCStatsTray.Tests
             var noisyCard = snapshot.Metrics.Single(metric => metric.Key == "NetworkDownload::filter0");
             Assert.IsFalse(noisyCard.DefaultVisible);
         }
+
+        [TestMethod]
+        public void Build_PreservesSourceNamesForCpuGpuAndBatteryCards()
+        {
+            var snapshot = DashboardSnapshotBuilder.Build(
+                new[]
+                {
+                    new DashboardMetricValue
+                    {
+                        Key = "CpuTemp",
+                        Label = "CPU Temp",
+                        Group = "CPU",
+                        SourceName = "AMD Ryzen 9 7940HS",
+                        Value = "74\u00B0C",
+                        DefaultVisible = true
+                    },
+                    new DashboardMetricValue
+                    {
+                        Key = "GpuTemp",
+                        Label = "GPU Temp",
+                        Group = "GPU",
+                        SourceName = "NVIDIA GeForce RTX 4060 Laptop GPU",
+                        Value = "61\u00B0C",
+                        DefaultVisible = true
+                    },
+                    new DashboardMetricValue
+                    {
+                        Key = "BatteryLevel",
+                        Label = "Battery Level",
+                        Group = "Power",
+                        SourceName = "Internal Battery",
+                        Value = "55%",
+                        DefaultVisible = true
+                    }
+                },
+                1000);
+
+            Assert.AreEqual("AMD Ryzen 9 7940HS", snapshot.Metrics.Single(metric => metric.Key == "CpuTemp").SourceName);
+            Assert.AreEqual("NVIDIA GeForce RTX 4060 Laptop GPU", snapshot.Metrics.Single(metric => metric.Key == "GpuTemp").SourceName);
+            Assert.AreEqual("Internal Battery", snapshot.Metrics.Single(metric => metric.Key == "BatteryLevel").SourceName);
+        }
     }
 }
