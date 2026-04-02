@@ -10,6 +10,8 @@ namespace PCStatsTray
         public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config, bool useOverlayDisplayModes = true)
         {
             var currentValues = new Dictionary<string, string>();
+            string selectedStorageSourceKey = config.StorageSourceKey?.Trim() ?? string.Empty;
+            string selectedNetworkSourceKey = config.NetworkSourceKey?.Trim() ?? string.Empty;
             float? hottestStorageTemp = null;
             float? busiestStorageLoad = null;
             double totalStorageReadBytes = 0;
@@ -20,6 +22,18 @@ namespace PCStatsTray
             bool sawStorageWrite = false;
             bool sawNetworkDownload = false;
             bool sawNetworkUpload = false;
+            bool matchedSelectedStorageSource = false;
+            bool matchedSelectedNetworkSource = false;
+            float? selectedStorageTemp = null;
+            float? selectedStorageLoad = null;
+            double selectedStorageReadBytes = 0;
+            double selectedStorageWriteBytes = 0;
+            bool sawSelectedStorageRead = false;
+            bool sawSelectedStorageWrite = false;
+            double selectedNetworkDownloadBytes = 0;
+            double selectedNetworkUploadBytes = 0;
+            bool sawSelectedNetworkDownload = false;
+            bool sawSelectedNetworkUpload = false;
             float? batteryLevel = null;
             float? batteryPower = null;
             IHardware? ramHardware = SelectRamHardware(computer.Hardware);
@@ -50,6 +64,18 @@ namespace PCStatsTray
                             ref totalStorageWriteBytes,
                             ref sawStorageRead,
                             ref sawStorageWrite);
+                        if (IsSelectedMetricSource(hardware, selectedStorageSourceKey))
+                        {
+                            matchedSelectedStorageSource = true;
+                            CollectSelectedStorageMetrics(
+                                hardware,
+                                ref selectedStorageTemp,
+                                ref selectedStorageLoad,
+                                ref selectedStorageReadBytes,
+                                ref selectedStorageWriteBytes,
+                                ref sawSelectedStorageRead,
+                                ref sawSelectedStorageWrite);
+                        }
                         break;
 
                     case HardwareType.Network:
@@ -59,6 +85,16 @@ namespace PCStatsTray
                             ref totalNetworkUploadBytes,
                             ref sawNetworkDownload,
                             ref sawNetworkUpload);
+                        if (IsSelectedMetricSource(hardware, selectedNetworkSourceKey))
+                        {
+                            matchedSelectedNetworkSource = true;
+                            CollectSelectedNetworkMetrics(
+                                hardware,
+                                ref selectedNetworkDownloadBytes,
+                                ref selectedNetworkUploadBytes,
+                                ref sawSelectedNetworkDownload,
+                                ref sawSelectedNetworkUpload);
+                        }
                         break;
 
                     case HardwareType.Battery:
@@ -72,32 +108,56 @@ namespace PCStatsTray
                 CollectRamMetrics(ramHardware, config, currentValues, useOverlayDisplayModes);
             }
 
-            if (hottestStorageTemp.HasValue)
+            if (matchedSelectedStorageSource && selectedStorageTemp.HasValue)
+            {
+                currentValues["StorageTemp"] = $"{selectedStorageTemp.Value:0}°C";
+            }
+            else if (hottestStorageTemp.HasValue)
             {
                 currentValues["StorageTemp"] = $"{hottestStorageTemp.Value:0}°C";
             }
 
-            if (busiestStorageLoad.HasValue)
+            if (matchedSelectedStorageSource && selectedStorageLoad.HasValue)
+            {
+                currentValues["StorageLoad"] = $"{selectedStorageLoad.Value:0}%";
+            }
+            else if (busiestStorageLoad.HasValue)
             {
                 currentValues["StorageLoad"] = $"{busiestStorageLoad.Value:0}%";
             }
 
-            if (sawStorageRead)
+            if (matchedSelectedStorageSource && sawSelectedStorageRead)
+            {
+                currentValues["StorageRead"] = FormatThroughput(selectedStorageReadBytes);
+            }
+            else if (sawStorageRead)
             {
                 currentValues["StorageRead"] = FormatThroughput(totalStorageReadBytes);
             }
 
-            if (sawStorageWrite)
+            if (matchedSelectedStorageSource && sawSelectedStorageWrite)
+            {
+                currentValues["StorageWrite"] = FormatThroughput(selectedStorageWriteBytes);
+            }
+            else if (sawStorageWrite)
             {
                 currentValues["StorageWrite"] = FormatThroughput(totalStorageWriteBytes);
             }
 
-            if (sawNetworkDownload)
+            if (matchedSelectedNetworkSource && sawSelectedNetworkDownload)
+            {
+                currentValues["NetworkDownload"] = FormatThroughput(selectedNetworkDownloadBytes);
+            }
+            else if (sawNetworkDownload)
             {
                 currentValues["NetworkDownload"] = FormatThroughput(totalNetworkDownloadBytes);
             }
 
-            if (sawNetworkUpload)
+            if (matchedSelectedNetworkSource && sawSelectedNetworkUpload)
+            {
+                currentValues["NetworkUpload"] = FormatThroughput(selectedNetworkUploadBytes);
+            }
+            else if (sawNetworkUpload)
             {
                 currentValues["NetworkUpload"] = FormatThroughput(totalNetworkUploadBytes);
             }
@@ -423,6 +483,77 @@ namespace PCStatsTray
             }
         }
 
+        private static void CollectSelectedStorageMetrics(
+            IHardware hardware,
+            ref float? storageTemp,
+            ref float? storageLoad,
+            ref double storageReadBytes,
+            ref double storageWriteBytes,
+            ref bool sawStorageRead,
+            ref bool sawStorageWrite)
+        {
+            var preferredTemperature = SelectStorageTemperatureSensor(hardware.Sensors);
+            if (preferredTemperature?.Value.HasValue == true)
+            {
+                storageTemp = preferredTemperature.Value.Value;
+            }
+
+            var activity = FindPreferredSensor(hardware.Sensors,
+                SensorType.Load,
+                "Total Activity",
+                "Activity");
+            if (activity?.Value.HasValue == true)
+            {
+                storageLoad = activity.Value.Value;
+            }
+
+            var read = FindPreferredSensor(hardware.Sensors,
+                SensorType.Throughput,
+                "Read");
+            if (read?.Value.HasValue == true)
+            {
+                sawStorageRead = true;
+                storageReadBytes = read.Value.Value;
+            }
+
+            var write = FindPreferredSensor(hardware.Sensors,
+                SensorType.Throughput,
+                "Write");
+            if (write?.Value.HasValue == true)
+            {
+                sawStorageWrite = true;
+                storageWriteBytes = write.Value.Value;
+            }
+        }
+
+        private static void CollectSelectedNetworkMetrics(
+            IHardware hardware,
+            ref double networkDownloadBytes,
+            ref double networkUploadBytes,
+            ref bool sawNetworkDownload,
+            ref bool sawNetworkUpload)
+        {
+            foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Throughput && sensor.Value.HasValue))
+            {
+                if (ContainsIgnoreCase(sensor.Name, "Download") ||
+                    ContainsIgnoreCase(sensor.Name, "Receive") ||
+                    ContainsIgnoreCase(sensor.Name, "Received"))
+                {
+                    sawNetworkDownload = true;
+                    networkDownloadBytes += sensor.Value!.Value;
+                    continue;
+                }
+
+                if (ContainsIgnoreCase(sensor.Name, "Upload") ||
+                    ContainsIgnoreCase(sensor.Name, "Transmit") ||
+                    ContainsIgnoreCase(sensor.Name, "Sent"))
+                {
+                    sawNetworkUpload = true;
+                    networkUploadBytes += sensor.Value!.Value;
+                }
+            }
+        }
+
         private static void CollectBatteryMetrics(IHardware hardware, ref float? batteryLevel, ref float? batteryPower)
         {
             var level = FindPreferredSensor(hardware.Sensors,
@@ -486,6 +617,12 @@ namespace PCStatsTray
         private static bool ContainsIgnoreCase(string text, string value)
         {
             return text.Contains(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSelectedMetricSource(IHardware hardware, string selectedSourceKey)
+        {
+            return !string.IsNullOrWhiteSpace(selectedSourceKey) &&
+                   string.Equals(hardware.Identifier.ToString(), selectedSourceKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsPeakCpuClockSensor(string sensorName)

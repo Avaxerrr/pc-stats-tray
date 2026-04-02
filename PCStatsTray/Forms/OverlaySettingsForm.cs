@@ -29,6 +29,8 @@ namespace PCStatsTray
         private readonly Func<float> _overlayScaleProvider;
         private readonly Computer _computer;
         private readonly List<FanSensorOption> _fanSensorOptions;
+        private readonly List<MetricSourceOption> _storageSourceOptions;
+        private readonly List<MetricSourceOption> _networkSourceOptions;
 
         private TextBox _toggleAllHotkeyBox = null!;
         private TextBox _toggleDesktopHotkeyBox = null!;
@@ -69,6 +71,8 @@ namespace PCStatsTray
         private ComboBox _cpuFanSensorBox = null!;
         private ComboBox _gpuFanSensorBox = null!;
         private ComboBox _caseFanSensorBox = null!;
+        private ComboBox _storageSourceBox = null!;
+        private ComboBox _networkSourceBox = null!;
         private CheckBox _shadowCheck = null!;
         private CheckBox _borderCheck = null!;
         private CheckBox _outlineCheck = null!;
@@ -88,6 +92,8 @@ namespace PCStatsTray
             _overlayScaleProvider = overlayScaleProvider ?? (() => Math.Max(1f, DeviceDpi > 0 ? DeviceDpi / 96f : 1f));
             _computer.Accept(new UpdateVisitor());
             _fanSensorOptions = SensorIdentity.GetFanSensorOptions(computer);
+            _storageSourceOptions = SensorIdentity.GetStorageSourceOptions(computer);
+            _networkSourceOptions = SensorIdentity.GetNetworkSourceOptions(computer);
             _capturedToggleAllHotkey = HotkeyBinding.FromStored(config.HotkeyModifiers, config.HotkeyVk, config.HotkeyDisplay);
             _capturedToggleDesktopHotkey = HotkeyBinding.FromStored(config.DesktopHotkeyModifiers, config.DesktopHotkeyVk, config.DesktopHotkeyDisplay);
             _capturedToggleRtssHotkey = HotkeyBinding.FromStored(config.RtssHotkeyModifiers, config.RtssHotkeyVk, config.RtssHotkeyDisplay);
@@ -135,21 +141,24 @@ namespace PCStatsTray
 
         private void BuildUI()
         {
-            _scrollContainer = new ModernScrollContainer(BgBase, Border, Accent)
+            _suspendLiveApply = true;
+            try
             {
-                Dock = DockStyle.Fill
-            };
-            var content = _scrollContainer.Content;
+                _scrollContainer = new ModernScrollContainer(BgBase, Border, Accent)
+                {
+                    Dock = DockStyle.Fill
+                };
+                var content = _scrollContainer.Content;
 
-            int y = Ui(16);
-            int cardWidth = Ui(350);
-            int marginX = Ui(24);
+                int y = Ui(16);
+                int cardWidth = Ui(350);
+                int marginX = Ui(24);
 
-            var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(246), cardWidth, marginX);
-            hotkeyCard.Controls.Add(MakeLabel("Toggle all OSD", Ui(16), Ui(42)));
-            _toggleAllHotkeyBox = MakeHotkeyBox(_capturedToggleAllHotkey.Display, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
-            WireHotkeyCapture(_toggleAllHotkeyBox, HotkeyCaptureTarget.ToggleAllOsd, () => _capturedToggleAllHotkey.IsEmpty ? _config.HotkeyDisplay : _capturedToggleAllHotkey.Display);
-            hotkeyCard.Controls.Add(_toggleAllHotkeyBox);
+                var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(246), cardWidth, marginX);
+                hotkeyCard.Controls.Add(MakeLabel("Toggle all OSD", Ui(16), Ui(42)));
+                _toggleAllHotkeyBox = MakeHotkeyBox(_capturedToggleAllHotkey.Display, new Point(Ui(132), Ui(38)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
+                WireHotkeyCapture(_toggleAllHotkeyBox, HotkeyCaptureTarget.ToggleAllOsd, () => _capturedToggleAllHotkey.IsEmpty ? _config.HotkeyDisplay : _capturedToggleAllHotkey.Display);
+                hotkeyCard.Controls.Add(_toggleAllHotkeyBox);
 
             hotkeyCard.Controls.Add(MakeLabel("Desktop OSD", Ui(16), Ui(92)));
             _toggleDesktopHotkeyBox = MakeHotkeyBox(_capturedToggleDesktopHotkey.Display, new Point(Ui(132), Ui(88)), new Size(hotkeyCard.Width - Ui(148), Ui(34)));
@@ -361,6 +370,19 @@ namespace PCStatsTray
 
             PopulateFanSensorChoices();
 
+            var metricSourcesCard = MakeCard(content, "Metric Sources", ref y, Ui(116), cardWidth, marginX);
+            metricSourcesCard.Controls.Add(MakeLabel("Storage OSD", Ui(16), Ui(42)));
+            _storageSourceBox = MakeComboBox(new Point(Ui(132), Ui(38)), new Size(metricSourcesCard.Width - Ui(148), Ui(28)));
+            _storageSourceBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            metricSourcesCard.Controls.Add(_storageSourceBox);
+
+            metricSourcesCard.Controls.Add(MakeLabel("Network OSD", Ui(16), Ui(78)));
+            _networkSourceBox = MakeComboBox(new Point(Ui(132), Ui(74)), new Size(metricSourcesCard.Width - Ui(148), Ui(28)));
+            _networkSourceBox.SelectedIndexChanged += (_, _) => ApplyLive();
+            metricSourcesCard.Controls.Add(_networkSourceBox);
+
+            PopulateMetricSourceChoices();
+
             int metricRowHeight = Ui(30);
             int metricGroupHeaderHeight = Ui(22);
             int metricsHeight = Ui(58) + Ui(10);
@@ -451,8 +473,13 @@ namespace PCStatsTray
             bottom.Controls.Add(closeButton);
             bottom.Controls.Add(liveLabel);
 
-            Controls.Add(_scrollContainer);
-            Controls.Add(bottom);
+                Controls.Add(_scrollContainer);
+                Controls.Add(bottom);
+            }
+            finally
+            {
+                _suspendLiveApply = false;
+            }
         }
 
         private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
@@ -569,6 +596,12 @@ namespace PCStatsTray
                 CpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_cpuFanSensorBox.SelectedItem),
                 GpuFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_gpuFanSensorBox.SelectedItem),
                 CaseFanSensorKey = OverlaySettingsOptionHelper.GetSelectedFanSensorKey(_caseFanSensorBox.SelectedItem),
+                StorageSourceKey = _storageSourceBox != null
+                    ? OverlaySettingsOptionHelper.GetSelectedMetricSourceKey(_storageSourceBox.SelectedItem)
+                    : _config.StorageSourceKey,
+                NetworkSourceKey = _networkSourceBox != null
+                    ? OverlaySettingsOptionHelper.GetSelectedMetricSourceKey(_networkSourceBox.SelectedItem)
+                    : _config.NetworkSourceKey,
                 DesktopMetricEnabledStates = _desktopMetricChecks.Select(check => check.Checked).ToArray(),
                 RtssMetricEnabledStates = _rtssMetricChecks.Select(check => check.Checked).ToArray()
             };
@@ -650,6 +683,7 @@ namespace PCStatsTray
                 _vramDisplayModeBox.SelectedIndex = _config.ShowVramAsPercentage() ? 1 : 0;
 
                 PopulateFanSensorChoices();
+                PopulateMetricSourceChoices();
 
                 for (int i = 0; i < _config.Metrics.Count && i < _desktopMetricChecks.Length; i++)
                 {
@@ -1133,6 +1167,22 @@ namespace PCStatsTray
             PopulateFanSensorChoice(_caseFanSensorBox, _config.CaseFanSensorKey);
         }
 
+        private void PopulateMetricSourceChoices()
+        {
+            PopulateMetricSourceChoice(
+                _storageSourceBox,
+                _storageSourceOptions,
+                _config.StorageSourceKey,
+                "Aggregate (hottest + busiest + totals)",
+                "Missing storage source");
+            PopulateMetricSourceChoice(
+                _networkSourceBox,
+                _networkSourceOptions,
+                _config.NetworkSourceKey,
+                "Aggregate (all adapters)",
+                "Missing network source");
+        }
+
         private void PopulateFanSensorChoice(ComboBox comboBox, string selectedKey)
         {
             comboBox.Items.Clear();
@@ -1143,6 +1193,27 @@ namespace PCStatsTray
 
             comboBox.SelectedItem = comboBox.Items
                 .OfType<FanSensorOption>()
+                .FirstOrDefault(option => string.Equals(option.Key, selectedKey, StringComparison.OrdinalIgnoreCase))
+                ?? comboBox.Items[0];
+
+            comboBox.Enabled = comboBox.Items.Count > 0;
+        }
+
+        private void PopulateMetricSourceChoice(
+            ComboBox comboBox,
+            IEnumerable<MetricSourceOption> availableOptions,
+            string selectedKey,
+            string autoDisplayLabel,
+            string missingDisplayLabel)
+        {
+            comboBox.Items.Clear();
+            foreach (var option in OverlaySettingsOptionHelper.BuildMetricSourceItems(availableOptions, selectedKey, autoDisplayLabel, missingDisplayLabel))
+            {
+                comboBox.Items.Add(option);
+            }
+
+            comboBox.SelectedItem = comboBox.Items
+                .OfType<MetricSourceOption>()
                 .FirstOrDefault(option => string.Equals(option.Key, selectedKey, StringComparison.OrdinalIgnoreCase))
                 ?? comboBox.Items[0];
 

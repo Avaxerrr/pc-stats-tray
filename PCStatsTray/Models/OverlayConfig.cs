@@ -116,6 +116,8 @@ namespace PCStatsTray
         public string CpuFanSensorKey { get; set; } = string.Empty;
         public string GpuFanSensorKey { get; set; } = string.Empty;
         public string CaseFanSensorKey { get; set; } = string.Empty;
+        public string StorageSourceKey { get; set; } = string.Empty;
+        public string NetworkSourceKey { get; set; } = string.Empty;
 
         // Which metrics to show
         public List<OverlayMetric> Metrics { get; set; } = DefaultMetrics();
