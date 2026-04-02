@@ -161,7 +161,9 @@
 
   function handleSnapshot(snapshot) {
     var previousSnapshot = latestSnapshot;
-    document.title = (snapshot.machineName || "PC Stats Tray") + " Terminal Dashboard";
+    document.title = snapshot.machineName
+      ? "PC Stats Tray - " + snapshot.machineName
+      : "PC Stats Tray";
 
     setStatus("online", "[ ACTIVE - STREAMING ]");
     clearError();
