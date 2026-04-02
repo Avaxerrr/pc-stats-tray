@@ -130,5 +130,39 @@ namespace PCStatsTray.Tests
             Assert.AreEqual("Realtek Gaming 2.5GbE", lanCard.SourceName);
             Assert.AreEqual("522 KB/s", lanCard.Value);
         }
+
+        [TestMethod]
+        public void Build_DeviceSpecificNetworkCardsCanBeHiddenByDefaultForNoisyAdapters()
+        {
+            var snapshot = DashboardSnapshotBuilder.Build(
+                new[]
+                {
+                    new DashboardMetricValue
+                    {
+                        Key = "NetworkDownload::wifi0",
+                        Label = "Network Down",
+                        Group = "Network",
+                        SourceName = "Wi-Fi",
+                        Value = "12.4 MB/s",
+                        DefaultVisible = true
+                    },
+                    new DashboardMetricValue
+                    {
+                        Key = "NetworkDownload::filter0",
+                        Label = "Network Down",
+                        Group = "Network",
+                        SourceName = "Wi-Fi-WFP Native MAC Layer LightWeight Filter-0000",
+                        Value = "12.4 MB/s",
+                        DefaultVisible = false
+                    }
+                },
+                1000);
+
+            var wifiCard = snapshot.Metrics.Single(metric => metric.Key == "NetworkDownload::wifi0");
+            Assert.IsTrue(wifiCard.DefaultVisible);
+
+            var noisyCard = snapshot.Metrics.Single(metric => metric.Key == "NetworkDownload::filter0");
+            Assert.IsFalse(noisyCard.DefaultVisible);
+        }
     }
 }

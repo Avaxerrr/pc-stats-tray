@@ -183,7 +183,8 @@ namespace PCStatsTray
                         "NetworkDownload",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(download.Value.Value)));
+                        FormatThroughput(download.Value.Value),
+                        IsPreferredNetworkSource(sourceName)));
                 }
 
                 var upload = SelectNetworkSensor(
@@ -197,7 +198,8 @@ namespace PCStatsTray
                         "NetworkUpload",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(upload.Value.Value)));
+                        FormatThroughput(upload.Value.Value),
+                        IsPreferredNetworkSource(sourceName)));
                 }
             }
 
@@ -211,6 +213,16 @@ namespace PCStatsTray
 
         private static DashboardMetricValue CreateDeviceMetricValue(string baseKey, string sourceKey, string sourceName, string value)
         {
+            return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value, defaultVisibleOverride: null);
+        }
+
+        private static DashboardMetricValue CreateDeviceMetricValue(
+            string baseKey,
+            string sourceKey,
+            string sourceName,
+            string value,
+            bool? defaultVisibleOverride)
+        {
             DashboardMetricDefinition definition = DashboardMetricCatalog.GetDefinitions()
                 .First(metric => string.Equals(metric.Key, baseKey, StringComparison.OrdinalIgnoreCase));
 
@@ -221,7 +233,7 @@ namespace PCStatsTray
                 Group = definition.Group,
                 SourceName = sourceName,
                 Value = value,
-                DefaultVisible = definition.DefaultVisible
+                DefaultVisible = defaultVisibleOverride ?? definition.DefaultVisible
             };
         }
 
@@ -297,6 +309,29 @@ namespace PCStatsTray
         private static ISensor? SelectNetworkSensor(IEnumerable<ISensor> sensors, params string[] preferredTerms)
         {
             return FindPreferredSensor(sensors, SensorType.Throughput, preferredTerms);
+        }
+
+        private static bool IsPreferredNetworkSource(string sourceName)
+        {
+            if (string.IsNullOrWhiteSpace(sourceName))
+            {
+                return false;
+            }
+
+            if (ContainsIgnoreCase(sourceName, "Kernel Debugger") ||
+                ContainsIgnoreCase(sourceName, "QoS Packet Scheduler") ||
+                ContainsIgnoreCase(sourceName, "WFP ") ||
+                ContainsIgnoreCase(sourceName, "Filter Driver"))
+            {
+                return false;
+            }
+
+            if (sourceName.StartsWith("Local Area Connection*", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return !string.Equals(sourceName, "Bluetooth Network Connection", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool ContainsIgnoreCase(string text, string value)
