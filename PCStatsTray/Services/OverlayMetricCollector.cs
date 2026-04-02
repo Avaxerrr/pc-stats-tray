@@ -157,15 +157,30 @@ namespace PCStatsTray
                 currentValues["CpuLoad"] = $"{load.Value.Value:0}%";
             }
 
-            var clocks = hardware.Sensors
+            var peakClocks = hardware.Sensors
                 .Where(sensor => sensor.SensorType == SensorType.Clock &&
                                  sensor.Value.HasValue &&
-                                 ContainsIgnoreCase(sensor.Name, "Core"))
+                                 IsPeakCpuClockSensor(sensor.Name))
                 .ToList();
-            if (clocks.Count > 0)
+            if (peakClocks.Count > 0)
             {
-                currentValues["CpuClock"] = $"{clocks.Max(sensor => sensor.Value!.Value):0} MHz";
-                currentValues["CpuClockAvg"] = $"{clocks.Average(sensor => sensor.Value!.Value):0} MHz";
+                currentValues["CpuClock"] = $"{peakClocks.Max(sensor => sensor.Value!.Value):0} MHz";
+            }
+
+            var averageClock = FindSensor(hardware.Sensors,
+                SensorType.Clock,
+                "Cores (Average)");
+            if (averageClock?.Value.HasValue == true)
+            {
+                currentValues["CpuClockAvg"] = $"{averageClock.Value.Value:0} MHz";
+            }
+
+            var effectiveAverageClock = FindSensor(hardware.Sensors,
+                SensorType.Clock,
+                "Cores (Average Effective)");
+            if (effectiveAverageClock?.Value.HasValue == true)
+            {
+                currentValues["CpuClockEffectiveAvg"] = $"{effectiveAverageClock.Value.Value:0} MHz";
             }
 
             var power = FindSensor(hardware.Sensors,
@@ -451,6 +466,16 @@ namespace PCStatsTray
         private static bool ContainsIgnoreCase(string text, string value)
         {
             return text.Contains(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPeakCpuClockSensor(string sensorName)
+        {
+            if (!ContainsIgnoreCase(sensorName, "Core #"))
+            {
+                return false;
+            }
+
+            return !ContainsIgnoreCase(sensorName, "Effective");
         }
 
         private static string FormatThroughput(double bytesPerSecond)

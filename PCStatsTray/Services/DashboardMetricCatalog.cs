@@ -24,8 +24,9 @@ namespace PCStatsTray
         {
             new("CpuTemp", "CPU Temp", "CPU", true),
             new("CpuLoad", "CPU Load", "CPU", true),
-            new("CpuClock", "CPU Peak Clock", "CPU", false),
             new("CpuClockAvg", "CPU Avg Clock", "CPU", false),
+            new("CpuClock", "CPU Peak Clock", "CPU", false),
+            new("CpuClockEffectiveAvg", "CPU Avg Eff Clock", "CPU", false),
             new("CpuPower", "CPU Power", "CPU", true),
             new("CpuFan", "CPU Fan", "CPU", false),
             new("GpuTemp", "GPU Temp", "GPU", true),

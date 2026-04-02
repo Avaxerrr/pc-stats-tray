@@ -124,7 +124,9 @@ namespace PCStatsTray
         {
             new("CpuTemp",  "CPU Temp",  true),
             new("CpuLoad",  "CPU Load",  true),
+            new("CpuClockAvg", "CPU Avg Clock", true),
             new("CpuClock", "CPU Peak Clock", false),
+            new("CpuClockEffectiveAvg", "CPU Avg Eff Clock", false),
             new("CpuPower", "CPU Power", false),
             new("CpuFan",   "CPU Fan",   false),
             new("GpuTemp",  "GPU Temp",  true),
@@ -152,16 +154,40 @@ namespace PCStatsTray
             }
 
             bool legacyFanEnabled = existingByKey.TryGetValue("FanSpeed", out var legacyFanMetric) && legacyFanMetric.Enabled;
+            bool migrateLegacyCpuClockState =
+                existingByKey.TryGetValue("CpuClock", out var legacyCpuClockMetric) &&
+                !existingByKey.ContainsKey("CpuClockAvg") &&
+                !existingByKey.ContainsKey("CpuClockEffectiveAvg");
             var normalized = new List<OverlayMetric>(defaults.Count);
 
             foreach (var defaultMetric in defaults)
             {
-                if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
+                if (migrateLegacyCpuClockState &&
+                    string.Equals(defaultMetric.Key, "CpuClockAvg", StringComparison.OrdinalIgnoreCase))
                 {
                     var normalizedMetric = new OverlayMetric(defaultMetric.Key, defaultMetric.Label);
                     normalizedMetric.SetEnabledStates(
-                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Desktop),
-                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                        legacyCpuClockMetric!.IsEnabledFor(OverlayDisplayTarget.Desktop),
+                        legacyCpuClockMetric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                    normalized.Add(normalizedMetric);
+                    continue;
+                }
+
+                if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
+                {
+                    var normalizedMetric = new OverlayMetric(defaultMetric.Key, defaultMetric.Label);
+                    bool desktopEnabled = currentMetric.IsEnabledFor(OverlayDisplayTarget.Desktop);
+                    bool rtssEnabled = currentMetric.IsEnabledFor(OverlayDisplayTarget.Rtss);
+                    if (migrateLegacyCpuClockState &&
+                        string.Equals(defaultMetric.Key, "CpuClock", StringComparison.OrdinalIgnoreCase))
+                    {
+                        desktopEnabled = false;
+                        rtssEnabled = false;
+                    }
+
+                    normalizedMetric.SetEnabledStates(
+                        desktopEnabled,
+                        rtssEnabled);
                     normalized.Add(normalizedMetric);
                     continue;
                 }

@@ -23,11 +23,12 @@ namespace PCStatsTray.Tests
                 {
                     ["CpuTemp"] = "72°C",
                     ["GpuLoad"] = "91%",
-                    ["CpuClock"] = "5200 MHz"
+                    ["CpuClock"] = "5200 MHz",
+                    ["CpuClockEffectiveAvg"] = "4100 MHz"
                 },
                 1000);
 
-            Assert.AreEqual(3, snapshot.Metrics.Count);
+            Assert.AreEqual(4, snapshot.Metrics.Count);
             Assert.AreEqual(1000, snapshot.RefreshIntervalMs);
 
             var cpuTemp = snapshot.Metrics.Single(metric => metric.Key == "CpuTemp");
@@ -44,6 +45,11 @@ namespace PCStatsTray.Tests
 
             var cpuClock = snapshot.Metrics.Single(metric => metric.Key == "CpuClock");
             Assert.IsFalse(cpuClock.DefaultVisible);
+
+            var effectiveClock = snapshot.Metrics.Single(metric => metric.Key == "CpuClockEffectiveAvg");
+            Assert.AreEqual("CPU", effectiveClock.Group);
+            Assert.AreEqual("4100 MHz", effectiveClock.Value);
+            Assert.IsFalse(effectiveClock.DefaultVisible);
         }
     }
 }

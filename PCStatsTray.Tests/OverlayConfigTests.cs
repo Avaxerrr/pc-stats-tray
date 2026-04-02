@@ -48,6 +48,35 @@ namespace PCStatsTray.Tests
         }
 
         [TestMethod]
+        public void NormalizeMetrics_MigratesLegacyCpuClockSelection_ToAverageClock()
+        {
+            var config = new OverlayConfig
+            {
+                Metrics = new List<OverlayMetric>
+                {
+                    new()
+                    {
+                        Key = "CpuClock",
+                        Label = "CPU Clock",
+                        Enabled = true,
+                        DesktopEnabled = true,
+                        RtssEnabled = false
+                    }
+                }
+            };
+
+            config.NormalizeMetrics();
+
+            var averageClock = config.Metrics.Single(metric => metric.Key == "CpuClockAvg");
+            var peakClock = config.Metrics.Single(metric => metric.Key == "CpuClock");
+
+            Assert.IsTrue(averageClock.IsEnabledFor(OverlayDisplayTarget.Desktop));
+            Assert.IsFalse(averageClock.IsEnabledFor(OverlayDisplayTarget.Rtss));
+            Assert.IsFalse(peakClock.IsEnabledFor(OverlayDisplayTarget.Desktop));
+            Assert.IsFalse(peakClock.IsEnabledFor(OverlayDisplayTarget.Rtss));
+        }
+
+        [TestMethod]
         public void ShowVramAsPercentage_ReturnsTrue_WhenConfigured()
         {
             var config = new OverlayConfig
