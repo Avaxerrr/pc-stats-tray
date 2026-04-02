@@ -82,6 +82,7 @@ namespace PCStatsTray
         private CheckBox[] _rtssMetricChecks = Array.Empty<CheckBox>();
         private ModernScrollContainer? _scrollContainer;
         private readonly System.Windows.Forms.Timer _statusTimer;
+        private readonly ToolTip _comboToolTip;
 
         public OverlaySettingsForm(Computer computer, OverlayConfig config, Action<OverlayConfig> onSave, Func<Size>? overlaySizeProvider = null, Func<float>? overlayScaleProvider = null)
         {
@@ -124,6 +125,14 @@ namespace PCStatsTray
             MaximumSize = new Size(FixedWindowWidth(), 2000);
             _statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             _statusTimer.Tick += (_, _) => UpdateOutputState();
+            _comboToolTip = new ToolTip
+            {
+                AutomaticDelay = 150,
+                AutoPopDelay = 12000,
+                InitialDelay = 250,
+                ReshowDelay = 100,
+                ShowAlways = true
+            };
 
             BuildUI();
             UpdateAppearanceState();
@@ -956,7 +965,7 @@ namespace PCStatsTray
 
         private ComboBox MakeComboBox(Point location, Size size)
         {
-            return new ComboBox
+            var comboBox = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
@@ -966,6 +975,9 @@ namespace PCStatsTray
                 ForeColor = FgPrimary,
                 Font = new Font("Segoe UI", 9.5f)
             };
+
+            WireComboToolTip(comboBox);
+            return comboBox;
         }
 
 
@@ -975,6 +987,29 @@ namespace PCStatsTray
             var comboBox = MakeComboBox(location, size);
             comboBox.SelectedIndexChanged += (_, _) => ApplyLive();
             return comboBox;
+        }
+
+        private void WireComboToolTip(ComboBox comboBox)
+        {
+            void refreshToolTip()
+            {
+                string text = GetComboToolTipText(comboBox);
+                _comboToolTip.SetToolTip(comboBox, text);
+            }
+
+            comboBox.SelectedIndexChanged += (_, _) => refreshToolTip();
+            comboBox.TextChanged += (_, _) => refreshToolTip();
+            comboBox.MouseEnter += (_, _) => refreshToolTip();
+            comboBox.DropDownClosed += (_, _) => refreshToolTip();
+
+            refreshToolTip();
+        }
+
+        private static string GetComboToolTipText(ComboBox comboBox)
+        {
+            return comboBox.SelectedItem?.ToString()
+                ?? comboBox.Text
+                ?? string.Empty;
         }
 
         private CheckBox MakeCheckBox(string text, int x, int y, bool isChecked)
