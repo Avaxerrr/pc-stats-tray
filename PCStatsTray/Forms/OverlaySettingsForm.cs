@@ -160,8 +160,8 @@ namespace PCStatsTray
                 var content = _scrollContainer.Content;
 
                 int y = Ui(16);
-                int cardWidth = Ui(350);
                 int marginX = Ui(24);
+                int cardWidth = ClientSize.Width - (marginX * 2) - Ui(10);
 
                 var hotkeyCard = MakeCard(content, "Hotkeys", ref y, Ui(246), cardWidth, marginX);
                 hotkeyCard.Controls.Add(MakeLabel("Toggle all OSD", Ui(16), Ui(42)));
@@ -1359,7 +1359,7 @@ namespace PCStatsTray
 
         private int FixedWindowWidth()
         {
-            return Ui(420);
+            return Ui(560);
         }
 
         private static Region CreateRoundedRegion(int width, int height, int radius)
