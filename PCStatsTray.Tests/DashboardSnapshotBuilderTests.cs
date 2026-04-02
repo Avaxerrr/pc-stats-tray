@@ -91,5 +91,44 @@ namespace PCStatsTray.Tests
             var secondDrive = snapshot.Metrics.Single(metric => metric.Key == "StorageTemp::drive1");
             Assert.AreEqual("Samsung SSD 990 PRO #2", secondDrive.SourceName);
         }
+
+        [TestMethod]
+        public void Build_PreservesSourceNamesForNetworkCards()
+        {
+            var snapshot = DashboardSnapshotBuilder.Build(
+                new[]
+                {
+                    new DashboardMetricValue
+                    {
+                        Key = "NetworkDownload::wifi0",
+                        Label = "Network Down",
+                        Group = "Network",
+                        SourceName = "Intel Wi-Fi 6 AX201",
+                        Value = "12.4 MB/s",
+                        DefaultVisible = true
+                    },
+                    new DashboardMetricValue
+                    {
+                        Key = "NetworkUpload::lan0",
+                        Label = "Network Up",
+                        Group = "Network",
+                        SourceName = "Realtek Gaming 2.5GbE",
+                        Value = "522 KB/s",
+                        DefaultVisible = true
+                    }
+                },
+                1000);
+
+            Assert.AreEqual(2, snapshot.Metrics.Count);
+
+            var wifiCard = snapshot.Metrics.Single(metric => metric.Key == "NetworkDownload::wifi0");
+            Assert.AreEqual("Network", wifiCard.Group);
+            Assert.AreEqual("Intel Wi-Fi 6 AX201", wifiCard.SourceName);
+            Assert.AreEqual("12.4 MB/s", wifiCard.Value);
+
+            var lanCard = snapshot.Metrics.Single(metric => metric.Key == "NetworkUpload::lan0");
+            Assert.AreEqual("Realtek Gaming 2.5GbE", lanCard.SourceName);
+            Assert.AreEqual("522 KB/s", lanCard.Value);
+        }
     }
 }

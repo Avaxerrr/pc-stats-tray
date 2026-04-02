@@ -17,25 +17,28 @@ namespace PCStatsTray
 
     internal static class DashboardSnapshotBuilder
     {
-        private static readonly string[] StorageMetricKeys =
+        private static readonly string[] DeviceSpecificMetricKeys =
         {
             "StorageTemp",
             "StorageLoad",
             "StorageRead",
-            "StorageWrite"
+            "StorageWrite",
+            "NetworkDownload",
+            "NetworkUpload"
         };
 
         public static DashboardSnapshot Build(Computer computer, OverlayConfig config, int refreshIntervalMs)
         {
             var currentValues = OverlayMetricCollector.Collect(computer, config, useOverlayDisplayModes: false);
-            var metrics = BuildStaticMetricValues(currentValues, includeStorageMetrics: false);
+            var metrics = BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: false);
             metrics.AddRange(BuildStorageMetricValues(computer));
+            metrics.AddRange(BuildNetworkMetricValues(computer));
             return Build(metrics, refreshIntervalMs);
         }
 
         internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, int refreshIntervalMs)
         {
-            return Build(BuildStaticMetricValues(currentValues, includeStorageMetrics: true), refreshIntervalMs);
+            return Build(BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: true), refreshIntervalMs);
         }
 
         internal static DashboardSnapshot Build(IEnumerable<DashboardMetricValue> metricValues, int refreshIntervalMs)
@@ -62,11 +65,11 @@ namespace PCStatsTray
 
         private static List<DashboardMetricValue> BuildStaticMetricValues(
             IReadOnlyDictionary<string, string> currentValues,
-            bool includeStorageMetrics)
+            bool includeDeviceSpecificMetrics)
         {
             return DashboardMetricCatalog.GetDefinitions()
                 .Where(metric => currentValues.ContainsKey(metric.Key))
-                .Where(metric => includeStorageMetrics || !IsStorageMetric(metric.Key))
+                .Where(metric => includeDeviceSpecificMetrics || !IsDeviceSpecificMetric(metric.Key))
                 .Select(metric => new DashboardMetricValue
                 {
                     Key = metric.Key,
@@ -87,13 +90,13 @@ namespace PCStatsTray
                 .ToList();
 
             var duplicateCounts = storageHardware
-                .GroupBy(hardware => NormalizeSourceName(hardware.Name), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(hardware => NormalizeSourceName(hardware.Name, "Storage Device"), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
             var duplicateIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var hardware in storageHardware)
             {
-                string normalizedSourceName = NormalizeSourceName(hardware.Name);
+                string normalizedSourceName = NormalizeSourceName(hardware.Name, "Storage Device");
                 string sourceName = BuildUniqueSourceName(normalizedSourceName, duplicateCounts, duplicateIndexes);
                 string sourceKey = SanitizeMetricKeyFragment(hardware.Identifier.ToString());
 
@@ -151,7 +154,62 @@ namespace PCStatsTray
             return metrics;
         }
 
+        private static List<DashboardMetricValue> BuildNetworkMetricValues(Computer computer)
+        {
+            var metrics = new List<DashboardMetricValue>();
+            var networkHardware = computer.Hardware
+                .Where(hardware => hardware.HardwareType == HardwareType.Network)
+                .ToList();
+
+            var duplicateCounts = networkHardware
+                .GroupBy(hardware => NormalizeSourceName(hardware.Name, "Network Adapter"), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+            var duplicateIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var hardware in networkHardware)
+            {
+                string normalizedSourceName = NormalizeSourceName(hardware.Name, "Network Adapter");
+                string sourceName = BuildUniqueSourceName(normalizedSourceName, duplicateCounts, duplicateIndexes);
+                string sourceKey = SanitizeMetricKeyFragment(hardware.Identifier.ToString());
+
+                var download = SelectNetworkSensor(
+                    hardware.Sensors,
+                    "Download",
+                    "Receive",
+                    "Received");
+                if (download?.Value.HasValue == true)
+                {
+                    metrics.Add(CreateDeviceMetricValue(
+                        "NetworkDownload",
+                        sourceKey,
+                        sourceName,
+                        FormatThroughput(download.Value.Value)));
+                }
+
+                var upload = SelectNetworkSensor(
+                    hardware.Sensors,
+                    "Upload",
+                    "Transmit",
+                    "Sent");
+                if (upload?.Value.HasValue == true)
+                {
+                    metrics.Add(CreateDeviceMetricValue(
+                        "NetworkUpload",
+                        sourceKey,
+                        sourceName,
+                        FormatThroughput(upload.Value.Value)));
+                }
+            }
+
+            return metrics;
+        }
+
         private static DashboardMetricValue CreateStorageMetricValue(string baseKey, string sourceKey, string sourceName, string value)
+        {
+            return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value);
+        }
+
+        private static DashboardMetricValue CreateDeviceMetricValue(string baseKey, string sourceKey, string sourceName, string value)
         {
             DashboardMetricDefinition definition = DashboardMetricCatalog.GetDefinitions()
                 .First(metric => string.Equals(metric.Key, baseKey, StringComparison.OrdinalIgnoreCase));
@@ -167,14 +225,14 @@ namespace PCStatsTray
             };
         }
 
-        private static bool IsStorageMetric(string key)
+        private static bool IsDeviceSpecificMetric(string key)
         {
-            return StorageMetricKeys.Any(metricKey => string.Equals(metricKey, key, StringComparison.OrdinalIgnoreCase));
+            return DeviceSpecificMetricKeys.Any(metricKey => string.Equals(metricKey, key, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static string NormalizeSourceName(string? sourceName)
+        private static string NormalizeSourceName(string? sourceName, string fallbackName)
         {
-            return string.IsNullOrWhiteSpace(sourceName) ? "Storage Device" : sourceName.Trim();
+            return string.IsNullOrWhiteSpace(sourceName) ? fallbackName : sourceName.Trim();
         }
 
         private static string BuildUniqueSourceName(
@@ -234,6 +292,11 @@ namespace PCStatsTray
                 .OrderBy(sensor => GetStorageTemperaturePriority(sensor.Name))
                 .ThenBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
+        }
+
+        private static ISensor? SelectNetworkSensor(IEnumerable<ISensor> sensors, params string[] preferredTerms)
+        {
+            return FindPreferredSensor(sensors, SensorType.Throughput, preferredTerms);
         }
 
         private static bool ContainsIgnoreCase(string text, string value)
