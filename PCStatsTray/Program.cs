@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
@@ -44,6 +45,8 @@ namespace PCStatsTray
         private static ToolStripMenuItem? dashboardStatusItem;
         private static LanDashboardServer? lanDashboardServer;
         private static CpuSensorSetupStatus cpuSensorSetupStatus = new();
+        private static readonly Dictionary<string, string> currentMetricValues = new();
+        private static readonly Dictionary<string, string> dashboardMetricValues = new();
 
         // Temperature tracking for tooltip stats
         private static float cpuMinTemp = float.MaxValue;
@@ -347,12 +350,14 @@ namespace PCStatsTray
             overlayConfig = config;
             hotkeyService?.ApplyConfig(config);
             lanDashboardServer?.ApplyConfig(config);
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
+            RefreshCollectedMetrics();
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(overlayConfig, dashboardMetricValues, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
             {
                 overlayForm.UpdateConfig(config);
+                overlayForm.RefreshData(currentMetricValues);
             }
 
             ApplyOverlayOutputs();
@@ -414,17 +419,33 @@ namespace PCStatsTray
         {
             computer.Accept(new UpdateVisitor());
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
+            RefreshCollectedMetrics();
             CaptureLatestTemperatures();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(overlayConfig, dashboardMetricValues, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
             UpdateCpuSensorSetupMenu();
             UpdateIcon();
 
             // Refresh all consumers from the same central cadence.
             detailsForm?.RefreshFromCurrentSnapshot();
-            overlayForm?.RefreshData();
+            overlayForm?.RefreshData(currentMetricValues);
             SyncRtssOverlay();
             UpdateRtssStatusMenu();
             UpdatePhoneDashboardStatusMenu();
+        }
+
+        private static void RefreshCollectedMetrics()
+        {
+            var raw = OverlayMetricCollector.Collect(computer, overlayConfig, useOverlayDisplayModes: false);
+
+            dashboardMetricValues.Clear();
+            currentMetricValues.Clear();
+            foreach (var pair in raw)
+            {
+                dashboardMetricValues[pair.Key] = pair.Value;
+                currentMetricValues[pair.Key] = pair.Value;
+            }
+
+            OverlayMetricCollector.ApplyRamOverlayFormatting(computer, overlayConfig, currentMetricValues);
         }
 
         private static void MaybeShowPawnIoPrompt()
@@ -543,25 +564,6 @@ namespace PCStatsTray
             float maxCpuTemp = latestCpuTemp;
             float maxGpuTemp = latestGpuTemp;
 
-            foreach (var hw in computer.Hardware)
-            {
-                if (hw.HardwareType == HardwareType.Cpu)
-                {
-                    var cpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && Math.Abs(maxCpuTemp) < 0.1 && s.Name.Contains("Core Max"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && Math.Abs(maxCpuTemp) < 0.1 && s.Name.Contains("Package"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-                    if (cpuTempSensor?.Value.HasValue == true)
-                        maxCpuTemp = Math.Max(maxCpuTemp, cpuTempSensor.Value.Value);
-                }
-                else if (hw.HardwareType == HardwareType.GpuNvidia || hw.HardwareType == HardwareType.GpuAmd || hw.HardwareType == HardwareType.GpuIntel)
-                {
-                    var gpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && Math.Abs(maxGpuTemp) < 0.1 && s.Name.Contains("Core"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-                    if (gpuTempSensor?.Value.HasValue == true)
-                        maxGpuTemp = Math.Max(maxGpuTemp, gpuTempSensor.Value.Value);
-                }
-            }
-
             float cpuAvg = cpuTempCount > 0 ? (float)(cpuSumTemp / cpuTempCount) : 0;
             float gpuAvg = gpuTempCount > 0 ? (float)(gpuSumTemp / gpuTempCount) : 0;
 
@@ -579,31 +581,8 @@ namespace PCStatsTray
 
         private static void CaptureLatestTemperatures()
         {
-            float sampledCpuTemp = 0;
-            float sampledGpuTemp = 0;
-
-            foreach (var hw in computer.Hardware)
-            {
-                if (hw.HardwareType == HardwareType.Cpu)
-                {
-                    var cpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledCpuTemp < 0.1f && s.Name.Contains("Core Max"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledCpuTemp < 0.1f && s.Name.Contains("Package"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-                    if (cpuTempSensor?.Value.HasValue == true)
-                    {
-                        sampledCpuTemp = Math.Max(sampledCpuTemp, cpuTempSensor.Value.Value);
-                    }
-                }
-                else if (hw.HardwareType == HardwareType.GpuNvidia || hw.HardwareType == HardwareType.GpuAmd || hw.HardwareType == HardwareType.GpuIntel)
-                {
-                    var gpuTempSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && sampledGpuTemp < 0.1f && s.Name.Contains("Core"))
-                                     ?? hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature);
-                    if (gpuTempSensor?.Value.HasValue == true)
-                    {
-                        sampledGpuTemp = Math.Max(sampledGpuTemp, gpuTempSensor.Value.Value);
-                    }
-                }
-            }
+            float sampledCpuTemp = TryParseMetricTemperature("CpuTemp");
+            float sampledGpuTemp = TryParseMetricTemperature("GpuTemp");
 
             latestCpuTemp = sampledCpuTemp;
             latestGpuTemp = sampledGpuTemp;
@@ -623,6 +602,25 @@ namespace PCStatsTray
                 gpuSumTemp += sampledGpuTemp;
                 gpuTempCount++;
             }
+        }
+
+        private static float TryParseMetricTemperature(string key)
+        {
+            if (!currentMetricValues.TryGetValue(key, out string? value) || string.IsNullOrWhiteSpace(value))
+            {
+                return 0f;
+            }
+
+            string numeric = new string(value
+                .TakeWhile(ch => char.IsDigit(ch) || ch == '.' || ch == '-')
+                .ToArray());
+
+            if (float.TryParse(numeric, out float parsed))
+            {
+                return parsed;
+            }
+
+            return 0f;
         }
 
         private static Color TextColor(float temp)
