@@ -147,6 +147,23 @@ namespace PCStatsTray
             }
         }
 
+        public void RefreshData(IReadOnlyDictionary<string, string> values)
+        {
+            _currentValues.Clear();
+            foreach (var pair in values)
+            {
+                _currentValues[pair.Key] = pair.Value;
+            }
+
+            RecalcSize();
+            RepositionOnScreen();
+
+            if (Visible && IsHandleCreated)
+            {
+                UpdateOverlay();
+            }
+        }
+
         public string BuildOsdText(OverlayDisplayTarget target = OverlayDisplayTarget.Desktop)
         {
             return OverlayTextFormatter.BuildOsdText(_config, _currentValues, target);

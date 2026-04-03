@@ -16,6 +16,7 @@ namespace PCStatsTray
         public string Key { get; init; } = string.Empty;
         public string Label { get; init; } = string.Empty;
         public string Group { get; init; } = string.Empty;
+        public string SourceName { get; init; } = string.Empty;
         public string? Value { get; init; }
         public bool Available { get; init; }
         public bool DefaultVisible { get; init; }

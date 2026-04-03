@@ -24,8 +24,9 @@ namespace PCStatsTray
         {
             new("CpuTemp", "CPU Temp", "CPU", true),
             new("CpuLoad", "CPU Load", "CPU", true),
-            new("CpuClock", "CPU Peak Clock", "CPU", false),
             new("CpuClockAvg", "CPU Avg Clock", "CPU", false),
+            new("CpuClock", "CPU Peak Clock", "CPU", false),
+            new("CpuClockEffectiveAvg", "CPU Avg Eff Clock", "CPU", false),
             new("CpuPower", "CPU Power", "CPU", true),
             new("CpuFan", "CPU Fan", "CPU", false),
             new("GpuTemp", "GPU Temp", "GPU", true),
@@ -42,11 +43,11 @@ namespace PCStatsTray
             new("RamAvailable", "RAM Available", "System", false),
             new("NetworkDownload", "Network Down", "Network", true),
             new("NetworkUpload", "Network Up", "Network", true),
-            new("StorageTemp", "Storage Temp", "Storage", false),
+            new("StorageTemp", "Storage Temp", "Storage", true),
             new("StorageLoad", "Storage Activity", "Storage", false),
             new("StorageRead", "Storage Read", "Storage", false),
             new("StorageWrite", "Storage Write", "Storage", false),
-            new("BatteryLevel", "Battery Level", "Power", false),
+            new("BatteryLevel", "Battery Level", "Power", true),
             new("BatteryPower", "Battery Power", "Power", false),
             new("CaseFan", "Case Fan", "System", false)
         };
