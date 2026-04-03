@@ -24,6 +24,7 @@ namespace PCStatsTray
 
         private readonly object _sync = new();
         private DashboardSnapshot _snapshot = new();
+        private Func<object?>? _gpuDebugSnapshotProvider;
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
         private Task? _acceptLoopTask;
@@ -38,6 +39,14 @@ namespace PCStatsTray
             lock (_sync)
             {
                 _snapshot = snapshot;
+            }
+        }
+
+        public void SetGpuDebugSnapshotProvider(Func<object?> provider)
+        {
+            lock (_sync)
+            {
+                _gpuDebugSnapshotProvider = provider;
             }
         }
 
@@ -207,6 +216,20 @@ namespace PCStatsTray
                         return;
                     }
 
+                    if (path.Equals("/api/debug/gpu", StringComparison.OrdinalIgnoreCase))
+                    {
+                        object? payloadObject = BuildGpuDebugResponse();
+                        if (payloadObject == null)
+                        {
+                            await WriteResponseAsync(stream, "503 Service Unavailable", "application/json; charset=utf-8", "{\"error\":\"GPU debug provider unavailable\"}", cancellationToken);
+                            return;
+                        }
+
+                        string payload = JsonSerializer.Serialize(payloadObject, JsonOptions);
+                        await WriteResponseAsync(stream, "200 OK", "application/json; charset=utf-8", payload, cancellationToken);
+                        return;
+                    }
+
 #if DEBUG
                     if (path.Equals("/dev/api", StringComparison.OrdinalIgnoreCase))
                     {
@@ -252,6 +275,17 @@ namespace PCStatsTray
                 LanUrl = GetLanUrl(),
                 Metrics = snapshot.Metrics
             };
+        }
+
+        private object? BuildGpuDebugResponse()
+        {
+            Func<object?>? provider;
+            lock (_sync)
+            {
+                provider = _gpuDebugSnapshotProvider;
+            }
+
+            return provider?.Invoke();
         }
 
         private static async Task<string?> ReadRequestLineAsync(NetworkStream stream, CancellationToken cancellationToken)

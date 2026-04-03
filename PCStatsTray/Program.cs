@@ -93,6 +93,7 @@ namespace PCStatsTray
             overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
             lanDashboardServer = new LanDashboardServer();
+            lanDashboardServer.SetGpuDebugSnapshotProvider(() => GpuSensorDebugSnapshotBuilder.Build(computer));
             lanDashboardServer.ApplyConfig(overlayConfig);
 
             contextMenu = new ContextMenuStrip();
