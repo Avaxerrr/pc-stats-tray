@@ -106,6 +106,7 @@ namespace PCStatsTray
         public int TextOutlineThickness { get; set; } = 2;
         public string RamDisplayMode { get; set; } = RamDisplayUsedAndTotal;
         public string VramDisplayMode { get; set; } = VramDisplayUsedAndTotal;
+        public int RefreshIntervalMs { get; set; } = 1000;
         public int SettingsWindowX { get; set; } = -1;
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
@@ -115,25 +116,42 @@ namespace PCStatsTray
         public string CpuFanSensorKey { get; set; } = string.Empty;
         public string GpuFanSensorKey { get; set; } = string.Empty;
         public string CaseFanSensorKey { get; set; } = string.Empty;
+        public string StorageSourceKey { get; set; } = string.Empty;
+        public string NetworkSourceKey { get; set; } = string.Empty;
 
         // Which metrics to show
         public List<OverlayMetric> Metrics { get; set; } = DefaultMetrics();
 
         public static List<OverlayMetric> DefaultMetrics() => new()
         {
-            new("CpuTemp",  "CPU Temp",  true),
-            new("CpuLoad",  "CPU Load",  true),
-            new("CpuClock", "CPU Clock", false),
-            new("CpuPower", "CPU Power", false),
-            new("CpuFan",   "CPU Fan",   false),
-            new("GpuTemp",  "GPU Temp",  true),
-            new("GpuLoad",  "GPU Load",  true),
-            new("GpuClock", "GPU Clock", false),
-            new("GpuVram",  "GPU VRAM",  false),
-            new("GpuPower", "GPU Power", false),
-            new("GpuFan",   "GPU Fan",   false),
-            new("RamUsage", "RAM Usage", true),
-            new("CaseFan",  "Case Fan",  false),
+            new("CpuTemp",              "CPU Temp",         true),
+            new("CpuLoad",              "CPU Load",         true),
+            new("CpuClockAvg",          "CPU Avg Clock",    true),
+            new("CpuClock",             "CPU Peak Clock",   false),
+            new("CpuClockEffectiveAvg", "CPU Avg Eff Clock",false),
+            new("CpuPower",             "CPU Power",        false),
+            new("CpuFan",               "CPU Fan",          false),
+            new("GpuTemp",              "GPU Temp",         true),
+            new("GpuLoad",              "GPU Load",         true),
+            new("GpuClock",             "GPU Clock",        false),
+            new("GpuMemoryClock",       "GPU Mem Clock",    false),
+            new("GpuVram",              "GPU VRAM",         false),
+            new("GpuPower",             "GPU Power",        false),
+            new("GpuFan",               "GPU Fan",          false),
+            new("GpuHotspotTemp",       "GPU Hotspot",      false),
+            new("GpuMemoryTemp",        "GPU Mem Temp",     false),
+            new("RamUsage",             "RAM Usage",        true),
+            new("RamLoad",              "RAM Load",         false),
+            new("RamAvailable",         "RAM Available",    false),
+            new("NetworkDownload",      "Net Down",         false),
+            new("NetworkUpload",        "Net Up",           false),
+            new("StorageTemp",          "Storage Temp",     false),
+            new("StorageLoad",          "Storage Load",     false),
+            new("StorageRead",          "Storage Read",     false),
+            new("StorageWrite",         "Storage Write",    false),
+            new("BatteryLevel",         "Battery Level",    false),
+            new("BatteryPower",         "Battery Power",    false),
+            new("CaseFan",              "Case Fan",         false),
         };
 
         public void NormalizeMetrics()
@@ -151,16 +169,40 @@ namespace PCStatsTray
             }
 
             bool legacyFanEnabled = existingByKey.TryGetValue("FanSpeed", out var legacyFanMetric) && legacyFanMetric.Enabled;
+            bool migrateLegacyCpuClockState =
+                existingByKey.TryGetValue("CpuClock", out var legacyCpuClockMetric) &&
+                !existingByKey.ContainsKey("CpuClockAvg") &&
+                !existingByKey.ContainsKey("CpuClockEffectiveAvg");
             var normalized = new List<OverlayMetric>(defaults.Count);
 
             foreach (var defaultMetric in defaults)
             {
-                if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
+                if (migrateLegacyCpuClockState &&
+                    string.Equals(defaultMetric.Key, "CpuClockAvg", StringComparison.OrdinalIgnoreCase))
                 {
                     var normalizedMetric = new OverlayMetric(defaultMetric.Key, defaultMetric.Label);
                     normalizedMetric.SetEnabledStates(
-                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Desktop),
-                        currentMetric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                        legacyCpuClockMetric!.IsEnabledFor(OverlayDisplayTarget.Desktop),
+                        legacyCpuClockMetric.IsEnabledFor(OverlayDisplayTarget.Rtss));
+                    normalized.Add(normalizedMetric);
+                    continue;
+                }
+
+                if (existingByKey.TryGetValue(defaultMetric.Key, out var currentMetric))
+                {
+                    var normalizedMetric = new OverlayMetric(defaultMetric.Key, defaultMetric.Label);
+                    bool desktopEnabled = currentMetric.IsEnabledFor(OverlayDisplayTarget.Desktop);
+                    bool rtssEnabled = currentMetric.IsEnabledFor(OverlayDisplayTarget.Rtss);
+                    if (migrateLegacyCpuClockState &&
+                        string.Equals(defaultMetric.Key, "CpuClock", StringComparison.OrdinalIgnoreCase))
+                    {
+                        desktopEnabled = false;
+                        rtssEnabled = false;
+                    }
+
+                    normalizedMetric.SetEnabledStates(
+                        desktopEnabled,
+                        rtssEnabled);
                     normalized.Add(normalizedMetric);
                     continue;
                 }
@@ -210,6 +252,11 @@ namespace PCStatsTray
             if (PhoneDashboardPort is < 1024 or > 65535)
             {
                 PhoneDashboardPort = 4587;
+            }
+
+            if (RefreshIntervalMs is not (1000 or 2000 or 5000))
+            {
+                RefreshIntervalMs = 1000;
             }
         }
 

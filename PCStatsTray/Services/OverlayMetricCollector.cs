@@ -7,17 +7,36 @@ namespace PCStatsTray
 {
     internal static class OverlayMetricCollector
     {
-        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config)
+        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config, bool useOverlayDisplayModes = true)
         {
             var currentValues = new Dictionary<string, string>();
+            string selectedStorageSourceKey = config.StorageSourceKey?.Trim() ?? string.Empty;
+            string selectedNetworkSourceKey = config.NetworkSourceKey?.Trim() ?? string.Empty;
             float? hottestStorageTemp = null;
             float? busiestStorageLoad = null;
             double totalStorageReadBytes = 0;
             double totalStorageWriteBytes = 0;
             double totalNetworkDownloadBytes = 0;
             double totalNetworkUploadBytes = 0;
+            bool sawStorageRead = false;
+            bool sawStorageWrite = false;
+            bool sawNetworkDownload = false;
+            bool sawNetworkUpload = false;
+            bool matchedSelectedStorageSource = false;
+            bool matchedSelectedNetworkSource = false;
+            float? selectedStorageTemp = null;
+            float? selectedStorageLoad = null;
+            double selectedStorageReadBytes = 0;
+            double selectedStorageWriteBytes = 0;
+            bool sawSelectedStorageRead = false;
+            bool sawSelectedStorageWrite = false;
+            double selectedNetworkDownloadBytes = 0;
+            double selectedNetworkUploadBytes = 0;
+            bool sawSelectedNetworkDownload = false;
+            bool sawSelectedNetworkUpload = false;
             float? batteryLevel = null;
             float? batteryPower = null;
+            IHardware? ramHardware = SelectRamHardware(computer.Hardware);
 
             foreach (var hardware in computer.Hardware)
             {
@@ -34,15 +53,48 @@ namespace PCStatsTray
                         break;
 
                     case HardwareType.Memory:
-                        CollectRamMetrics(hardware, config, currentValues);
                         break;
 
                     case HardwareType.Storage:
-                        CollectStorageMetrics(hardware, ref hottestStorageTemp, ref busiestStorageLoad, ref totalStorageReadBytes, ref totalStorageWriteBytes);
+                        CollectStorageMetrics(
+                            hardware,
+                            ref hottestStorageTemp,
+                            ref busiestStorageLoad,
+                            ref totalStorageReadBytes,
+                            ref totalStorageWriteBytes,
+                            ref sawStorageRead,
+                            ref sawStorageWrite);
+                        if (IsSelectedMetricSource(hardware, selectedStorageSourceKey))
+                        {
+                            matchedSelectedStorageSource = true;
+                            CollectSelectedStorageMetrics(
+                                hardware,
+                                ref selectedStorageTemp,
+                                ref selectedStorageLoad,
+                                ref selectedStorageReadBytes,
+                                ref selectedStorageWriteBytes,
+                                ref sawSelectedStorageRead,
+                                ref sawSelectedStorageWrite);
+                        }
                         break;
 
                     case HardwareType.Network:
-                        CollectNetworkMetrics(hardware, ref totalNetworkDownloadBytes, ref totalNetworkUploadBytes);
+                        CollectNetworkMetrics(
+                            hardware,
+                            ref totalNetworkDownloadBytes,
+                            ref totalNetworkUploadBytes,
+                            ref sawNetworkDownload,
+                            ref sawNetworkUpload);
+                        if (IsSelectedMetricSource(hardware, selectedNetworkSourceKey))
+                        {
+                            matchedSelectedNetworkSource = true;
+                            CollectSelectedNetworkMetrics(
+                                hardware,
+                                ref selectedNetworkDownloadBytes,
+                                ref selectedNetworkUploadBytes,
+                                ref sawSelectedNetworkDownload,
+                                ref sawSelectedNetworkUpload);
+                        }
                         break;
 
                     case HardwareType.Battery:
@@ -51,32 +103,61 @@ namespace PCStatsTray
                 }
             }
 
-            if (hottestStorageTemp.HasValue)
+            if (ramHardware != null)
+            {
+                CollectRamMetrics(ramHardware, config, currentValues, useOverlayDisplayModes);
+            }
+
+            if (matchedSelectedStorageSource && selectedStorageTemp.HasValue)
+            {
+                currentValues["StorageTemp"] = $"{selectedStorageTemp.Value:0}°C";
+            }
+            else if (hottestStorageTemp.HasValue)
             {
                 currentValues["StorageTemp"] = $"{hottestStorageTemp.Value:0}°C";
             }
 
-            if (busiestStorageLoad.HasValue)
+            if (matchedSelectedStorageSource && selectedStorageLoad.HasValue)
+            {
+                currentValues["StorageLoad"] = $"{selectedStorageLoad.Value:0}%";
+            }
+            else if (busiestStorageLoad.HasValue)
             {
                 currentValues["StorageLoad"] = $"{busiestStorageLoad.Value:0}%";
             }
 
-            if (totalStorageReadBytes > 0)
+            if (matchedSelectedStorageSource && sawSelectedStorageRead)
+            {
+                currentValues["StorageRead"] = FormatThroughput(selectedStorageReadBytes);
+            }
+            else if (sawStorageRead)
             {
                 currentValues["StorageRead"] = FormatThroughput(totalStorageReadBytes);
             }
 
-            if (totalStorageWriteBytes > 0)
+            if (matchedSelectedStorageSource && sawSelectedStorageWrite)
+            {
+                currentValues["StorageWrite"] = FormatThroughput(selectedStorageWriteBytes);
+            }
+            else if (sawStorageWrite)
             {
                 currentValues["StorageWrite"] = FormatThroughput(totalStorageWriteBytes);
             }
 
-            if (totalNetworkDownloadBytes > 0)
+            if (matchedSelectedNetworkSource && sawSelectedNetworkDownload)
+            {
+                currentValues["NetworkDownload"] = FormatThroughput(selectedNetworkDownloadBytes);
+            }
+            else if (sawNetworkDownload)
             {
                 currentValues["NetworkDownload"] = FormatThroughput(totalNetworkDownloadBytes);
             }
 
-            if (totalNetworkUploadBytes > 0)
+            if (matchedSelectedNetworkSource && sawSelectedNetworkUpload)
+            {
+                currentValues["NetworkUpload"] = FormatThroughput(selectedNetworkUploadBytes);
+            }
+            else if (sawNetworkUpload)
             {
                 currentValues["NetworkUpload"] = FormatThroughput(totalNetworkUploadBytes);
             }
@@ -119,16 +200,13 @@ namespace PCStatsTray
 
         private static void CollectCpuMetrics(IHardware hardware, IDictionary<string, string> currentValues)
         {
-            var temp = FindSensor(hardware.Sensors,
-                SensorType.Temperature,
-                "Core Max",
-                "Package");
+            var temp = SelectCpuTemperatureSensor(hardware.Sensors);
             if (temp?.Value.HasValue == true)
             {
                 currentValues["CpuTemp"] = $"{temp.Value.Value:0}°C";
             }
 
-            var load = FindSensor(hardware.Sensors,
+            var load = FindPreferredSensor(hardware.Sensors,
                 SensorType.Load,
                 "Total");
             if (load?.Value.HasValue == true)
@@ -136,18 +214,33 @@ namespace PCStatsTray
                 currentValues["CpuLoad"] = $"{load.Value.Value:0}%";
             }
 
-            var clocks = hardware.Sensors
+            var peakClocks = hardware.Sensors
                 .Where(sensor => sensor.SensorType == SensorType.Clock &&
                                  sensor.Value.HasValue &&
-                                 ContainsIgnoreCase(sensor.Name, "Core"))
+                                 IsPeakCpuClockSensor(sensor.Name))
                 .ToList();
-            if (clocks.Count > 0)
+            if (peakClocks.Count > 0)
             {
-                currentValues["CpuClock"] = $"{clocks.Max(sensor => sensor.Value!.Value):0} MHz";
-                currentValues["CpuClockAvg"] = $"{clocks.Average(sensor => sensor.Value!.Value):0} MHz";
+                currentValues["CpuClock"] = $"{peakClocks.Max(sensor => sensor.Value!.Value):0} MHz";
             }
 
-            var power = FindSensor(hardware.Sensors,
+            var averageClock = FindPreferredSensor(hardware.Sensors,
+                SensorType.Clock,
+                "Cores (Average)");
+            if (averageClock?.Value.HasValue == true)
+            {
+                currentValues["CpuClockAvg"] = $"{averageClock.Value.Value:0} MHz";
+            }
+
+            var effectiveAverageClock = FindPreferredSensor(hardware.Sensors,
+                SensorType.Clock,
+                "Cores (Average Effective)");
+            if (effectiveAverageClock?.Value.HasValue == true)
+            {
+                currentValues["CpuClockEffectiveAvg"] = $"{effectiveAverageClock.Value.Value:0} MHz";
+            }
+
+            var power = FindPreferredSensor(hardware.Sensors,
                 SensorType.Power,
                 "Package");
             if (power?.Value.HasValue == true)
@@ -156,9 +249,26 @@ namespace PCStatsTray
             }
         }
 
+        internal static void ApplyRamOverlayFormatting(Computer computer, OverlayConfig config, IDictionary<string, string> values)
+        {
+            if (!config.ShowRamAsPercentage()) return;
+            var ram = SelectRamHardware(computer.Hardware);
+            if (ram == null) return;
+            var used = FindPreferredSensor(ram.Sensors, SensorType.Data, "Used");
+            var available = FindPreferredSensor(ram.Sensors, SensorType.Data, "Available");
+            if (used?.Value.HasValue != true) return;
+            float usedGb = used.Value!.Value;
+            float? availableGb = available?.Value.HasValue == true ? available.Value.Value : (float?)null;
+            values["RamUsage"] = FormatRamUsage(usedGb, availableGb, showPercentage: true);
+        }
+
         private static void CollectGpuMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues)
         {
-            var temp = FindSensor(hardware.Sensors,
+            var allSensors = hardware.Sensors
+                .Concat(hardware.SubHardware.SelectMany(sub => sub.Sensors))
+                .ToList();
+
+            var temp = FindPreferredSensor(allSensors,
                 SensorType.Temperature,
                 "Core");
             if (temp?.Value.HasValue == true)
@@ -166,7 +276,7 @@ namespace PCStatsTray
                 currentValues["GpuTemp"] = $"{temp.Value.Value:0}°C";
             }
 
-            var hotspotTemp = FindSensor(hardware.Sensors,
+            var hotspotTemp = FindPreferredSensor(allSensors,
                 SensorType.Temperature,
                 "Hot Spot",
                 "Hotspot",
@@ -176,7 +286,7 @@ namespace PCStatsTray
                 currentValues["GpuHotspotTemp"] = $"{hotspotTemp.Value.Value:0}°C";
             }
 
-            var memoryTemp = FindSensor(hardware.Sensors,
+            var memoryTemp = FindPreferredSensor(allSensors,
                 SensorType.Temperature,
                 "Memory");
             if (memoryTemp?.Value.HasValue == true)
@@ -184,7 +294,7 @@ namespace PCStatsTray
                 currentValues["GpuMemoryTemp"] = $"{memoryTemp.Value.Value:0}°C";
             }
 
-            var load = FindSensor(hardware.Sensors,
+            var load = FindPreferredSensor(allSensors,
                 SensorType.Load,
                 "Core");
             if (load?.Value.HasValue == true)
@@ -192,7 +302,7 @@ namespace PCStatsTray
                 currentValues["GpuLoad"] = $"{load.Value.Value:0}%";
             }
 
-            var coreClock = FindSensor(hardware.Sensors,
+            var coreClock = FindPreferredSensor(allSensors,
                 SensorType.Clock,
                 "Core");
             if (coreClock?.Value.HasValue == true)
@@ -200,7 +310,7 @@ namespace PCStatsTray
                 currentValues["GpuClock"] = $"{coreClock.Value.Value:0} MHz";
             }
 
-            var memoryClock = FindSensor(hardware.Sensors,
+            var memoryClock = FindPreferredSensor(allSensors,
                 SensorType.Clock,
                 "Memory");
             if (memoryClock?.Value.HasValue == true)
@@ -208,11 +318,11 @@ namespace PCStatsTray
                 currentValues["GpuMemoryClock"] = $"{memoryClock.Value.Value:0} MHz";
             }
 
-            var vramUsed = FindSensor(hardware.Sensors,
+            var vramUsed = FindPreferredSensor(allSensors,
                 SensorType.SmallData,
                 "Memory Used",
                 "GPU Memory Used");
-            var vramTotal = FindSensor(hardware.Sensors,
+            var vramTotal = FindPreferredSensor(allSensors,
                 SensorType.SmallData,
                 "Memory Total",
                 "GPU Memory Total");
@@ -223,22 +333,19 @@ namespace PCStatsTray
                 currentValues["GpuVram"] = FormatVramUsage(usedMb, totalMb, config.ShowVramAsPercentage());
             }
 
-            var power = FindSensor(hardware.Sensors,
-                SensorType.Power,
-                "Board",
-                "Total");
+            var power = SelectGpuPowerSensor(allSensors);
             if (power?.Value.HasValue == true)
             {
                 currentValues["GpuPower"] = $"{power.Value.Value:0.#} W";
             }
         }
 
-        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues)
+        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues, bool useOverlayDisplayModes)
         {
-            var used = FindSensor(hardware.Sensors,
+            var used = FindPreferredSensor(hardware.Sensors,
                 SensorType.Data,
                 "Used");
-            var available = FindSensor(hardware.Sensors,
+            var available = FindPreferredSensor(hardware.Sensors,
                 SensorType.Data,
                 "Available");
             if (used?.Value.HasValue != true)
@@ -248,7 +355,8 @@ namespace PCStatsTray
 
             float usedGb = used.Value!.Value;
             float? availableGb = available?.Value.HasValue == true ? available.Value.Value : null;
-            currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, config.ShowRamAsPercentage());
+            bool showRamAsPercentage = useOverlayDisplayModes && config.ShowRamAsPercentage();
+            currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, showRamAsPercentage);
 
             if (availableGb.HasValue)
             {
@@ -261,7 +369,7 @@ namespace PCStatsTray
             }
             else
             {
-                var load = FindSensor(hardware.Sensors,
+                var load = FindPreferredSensor(hardware.Sensors,
                     SensorType.Load,
                     "Memory");
                 if (load?.Value.HasValue == true)
@@ -271,25 +379,53 @@ namespace PCStatsTray
             }
         }
 
+        internal static IHardware? SelectRamHardware(IEnumerable<IHardware> hardwareItems)
+        {
+            return hardwareItems
+                .Where(hardware => hardware.HardwareType == HardwareType.Memory)
+                .OrderBy(hardware => GetMemoryHardwarePriority(hardware.Name))
+                .FirstOrDefault();
+        }
+
+        internal static int GetMemoryHardwarePriority(string? hardwareName)
+        {
+            if (string.IsNullOrWhiteSpace(hardwareName))
+            {
+                return 1;
+            }
+
+            if (ContainsIgnoreCase(hardwareName, "Total") || ContainsIgnoreCase(hardwareName, "Physical"))
+            {
+                return 0;
+            }
+
+            if (ContainsIgnoreCase(hardwareName, "Virtual"))
+            {
+                return 2;
+            }
+
+            return 1;
+        }
+
         private static void CollectStorageMetrics(
             IHardware hardware,
             ref float? hottestStorageTemp,
             ref float? busiestStorageLoad,
             ref double totalStorageReadBytes,
-            ref double totalStorageWriteBytes)
+            ref double totalStorageWriteBytes,
+            ref bool sawStorageRead,
+            ref bool sawStorageWrite)
         {
-            var tempSensors = hardware.Sensors
-                .Where(sensor => sensor.SensorType == SensorType.Temperature && sensor.Value.HasValue)
-                .ToList();
-            if (tempSensors.Count > 0)
+            var preferredTemperature = SelectStorageTemperatureSensor(hardware.Sensors);
+            if (preferredTemperature?.Value.HasValue == true)
             {
-                float hottestOnDrive = tempSensors.Max(sensor => sensor.Value!.Value);
+                float hottestOnDrive = preferredTemperature.Value.Value;
                 hottestStorageTemp = !hottestStorageTemp.HasValue
                     ? hottestOnDrive
                     : Math.Max(hottestStorageTemp.Value, hottestOnDrive);
             }
 
-            var activity = FindSensor(hardware.Sensors,
+            var activity = FindPreferredSensor(hardware.Sensors,
                 SensorType.Load,
                 "Total Activity",
                 "Activity");
@@ -300,19 +436,21 @@ namespace PCStatsTray
                     : Math.Max(busiestStorageLoad.Value, activity.Value.Value);
             }
 
-            var read = FindSensor(hardware.Sensors,
+            var read = FindPreferredSensor(hardware.Sensors,
                 SensorType.Throughput,
                 "Read");
             if (read?.Value.HasValue == true)
             {
+                sawStorageRead = true;
                 totalStorageReadBytes += read.Value.Value;
             }
 
-            var write = FindSensor(hardware.Sensors,
+            var write = FindPreferredSensor(hardware.Sensors,
                 SensorType.Throughput,
                 "Write");
             if (write?.Value.HasValue == true)
             {
+                sawStorageWrite = true;
                 totalStorageWriteBytes += write.Value.Value;
             }
         }
@@ -320,7 +458,9 @@ namespace PCStatsTray
         private static void CollectNetworkMetrics(
             IHardware hardware,
             ref double totalNetworkDownloadBytes,
-            ref double totalNetworkUploadBytes)
+            ref double totalNetworkUploadBytes,
+            ref bool sawNetworkDownload,
+            ref bool sawNetworkUpload)
         {
             foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Throughput && sensor.Value.HasValue))
             {
@@ -328,6 +468,7 @@ namespace PCStatsTray
                     ContainsIgnoreCase(sensor.Name, "Receive") ||
                     ContainsIgnoreCase(sensor.Name, "Received"))
                 {
+                    sawNetworkDownload = true;
                     totalNetworkDownloadBytes += sensor.Value!.Value;
                     continue;
                 }
@@ -336,18 +477,90 @@ namespace PCStatsTray
                     ContainsIgnoreCase(sensor.Name, "Transmit") ||
                     ContainsIgnoreCase(sensor.Name, "Sent"))
                 {
+                    sawNetworkUpload = true;
                     totalNetworkUploadBytes += sensor.Value!.Value;
+                }
+            }
+        }
+
+        private static void CollectSelectedStorageMetrics(
+            IHardware hardware,
+            ref float? storageTemp,
+            ref float? storageLoad,
+            ref double storageReadBytes,
+            ref double storageWriteBytes,
+            ref bool sawStorageRead,
+            ref bool sawStorageWrite)
+        {
+            var preferredTemperature = SelectStorageTemperatureSensor(hardware.Sensors);
+            if (preferredTemperature?.Value.HasValue == true)
+            {
+                storageTemp = preferredTemperature.Value.Value;
+            }
+
+            var activity = FindPreferredSensor(hardware.Sensors,
+                SensorType.Load,
+                "Total Activity",
+                "Activity");
+            if (activity?.Value.HasValue == true)
+            {
+                storageLoad = activity.Value.Value;
+            }
+
+            var read = FindPreferredSensor(hardware.Sensors,
+                SensorType.Throughput,
+                "Read");
+            if (read?.Value.HasValue == true)
+            {
+                sawStorageRead = true;
+                storageReadBytes = read.Value.Value;
+            }
+
+            var write = FindPreferredSensor(hardware.Sensors,
+                SensorType.Throughput,
+                "Write");
+            if (write?.Value.HasValue == true)
+            {
+                sawStorageWrite = true;
+                storageWriteBytes = write.Value.Value;
+            }
+        }
+
+        private static void CollectSelectedNetworkMetrics(
+            IHardware hardware,
+            ref double networkDownloadBytes,
+            ref double networkUploadBytes,
+            ref bool sawNetworkDownload,
+            ref bool sawNetworkUpload)
+        {
+            foreach (var sensor in hardware.Sensors.Where(sensor => sensor.SensorType == SensorType.Throughput && sensor.Value.HasValue))
+            {
+                if (ContainsIgnoreCase(sensor.Name, "Download") ||
+                    ContainsIgnoreCase(sensor.Name, "Receive") ||
+                    ContainsIgnoreCase(sensor.Name, "Received"))
+                {
+                    sawNetworkDownload = true;
+                    networkDownloadBytes += sensor.Value!.Value;
+                    continue;
+                }
+
+                if (ContainsIgnoreCase(sensor.Name, "Upload") ||
+                    ContainsIgnoreCase(sensor.Name, "Transmit") ||
+                    ContainsIgnoreCase(sensor.Name, "Sent"))
+                {
+                    sawNetworkUpload = true;
+                    networkUploadBytes += sensor.Value!.Value;
                 }
             }
         }
 
         private static void CollectBatteryMetrics(IHardware hardware, ref float? batteryLevel, ref float? batteryPower)
         {
-            var level = FindSensor(hardware.Sensors,
+            var level = FindPreferredSensor(hardware.Sensors,
                 SensorType.Level,
                 "Charge",
                 "Level")
-                ?? FindSensor(hardware.Sensors,
+                ?? FindPreferredSensor(hardware.Sensors,
                     SensorType.Load,
                     "Charge",
                     "Level");
@@ -356,7 +569,7 @@ namespace PCStatsTray
                 batteryLevel = level.Value.Value;
             }
 
-            var power = FindSensor(hardware.Sensors,
+            var power = FindPreferredSensor(hardware.Sensors,
                 SensorType.Power,
                 "Charge",
                 "Discharge",
@@ -368,7 +581,7 @@ namespace PCStatsTray
             }
         }
 
-        private static ISensor? FindSensor(IEnumerable<ISensor> sensors, SensorType sensorType, params string[] preferredTerms)
+        private static ISensor? FindPreferredSensor(IEnumerable<ISensor> sensors, SensorType sensorType, params string[] preferredTerms)
         {
             var candidates = sensors
                 .Where(sensor => sensor.SensorType == sensorType && sensor.Value.HasValue)
@@ -387,12 +600,111 @@ namespace PCStatsTray
                 }
             }
 
-            return candidates.FirstOrDefault();
+            return null;
+        }
+
+        private static ISensor? SelectStorageTemperatureSensor(IEnumerable<ISensor> sensors)
+        {
+            return sensors
+                .Where(sensor => sensor.SensorType == SensorType.Temperature &&
+                                 sensor.Value.HasValue &&
+                                 !IsStorageTemperatureThresholdSensor(sensor.Name))
+                .OrderBy(sensor => GetStorageTemperaturePriority(sensor.Name))
+                .ThenBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
         }
 
         private static bool ContainsIgnoreCase(string text, string value)
         {
             return text.Contains(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSelectedMetricSource(IHardware hardware, string selectedSourceKey)
+        {
+            return !string.IsNullOrWhiteSpace(selectedSourceKey) &&
+                   string.Equals(hardware.Identifier.ToString(), selectedSourceKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPeakCpuClockSensor(string sensorName)
+        {
+            if (!ContainsIgnoreCase(sensorName, "Core #"))
+            {
+                return false;
+            }
+
+            return !ContainsIgnoreCase(sensorName, "Effective");
+        }
+
+        private static ISensor? SelectCpuTemperatureSensor(IEnumerable<ISensor> sensors)
+        {
+            return FindPreferredSensor(
+                       sensors,
+                       SensorType.Temperature,
+                       "Core Max",
+                       "Package",
+                       "Tctl",
+                       "Tdie")
+                   ?? sensors.FirstOrDefault(sensor => sensor.SensorType == SensorType.Temperature && sensor.Value.HasValue);
+        }
+
+        private static ISensor? SelectGpuPowerSensor(IEnumerable<ISensor> sensors)
+        {
+            return FindPreferredSensor(
+                       sensors,
+                       SensorType.Power,
+                       "Board",
+                       "Total",
+                       "Package")
+                   ?? sensors.FirstOrDefault(sensor => sensor.SensorType == SensorType.Power && sensor.Value.HasValue);
+        }
+
+        internal static bool IsStorageTemperatureThresholdSensor(string? sensorName)
+        {
+            if (string.IsNullOrWhiteSpace(sensorName))
+            {
+                return false;
+            }
+
+            return ContainsIgnoreCase(sensorName, "Critical") ||
+                   ContainsIgnoreCase(sensorName, "Warning") ||
+                   ContainsIgnoreCase(sensorName, "Limit") ||
+                   ContainsIgnoreCase(sensorName, "Maximum") ||
+                   ContainsIgnoreCase(sensorName, "Max");
+        }
+
+        internal static int GetStorageTemperaturePriority(string? sensorName)
+        {
+            if (string.IsNullOrWhiteSpace(sensorName))
+            {
+                return 100;
+            }
+
+            if (ContainsIgnoreCase(sensorName, "Composite"))
+            {
+                return 0;
+            }
+
+            if (ContainsIgnoreCase(sensorName, "Temperature #1"))
+            {
+                return 1;
+            }
+
+            if (ContainsIgnoreCase(sensorName, "Temperature #2"))
+            {
+                return 2;
+            }
+
+            if (ContainsIgnoreCase(sensorName, "Temperature #"))
+            {
+                return 10;
+            }
+
+            if (ContainsIgnoreCase(sensorName, "Temperature"))
+            {
+                return 20;
+            }
+
+            return 50;
         }
 
         private static string FormatThroughput(double bytesPerSecond)

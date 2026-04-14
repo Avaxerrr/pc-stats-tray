@@ -28,6 +28,8 @@ namespace PCStatsTray
         public string CpuFanSensorKey { get; init; } = string.Empty;
         public string GpuFanSensorKey { get; init; } = string.Empty;
         public string CaseFanSensorKey { get; init; } = string.Empty;
+        public string StorageSourceKey { get; init; } = string.Empty;
+        public string NetworkSourceKey { get; init; } = string.Empty;
         public bool[] DesktopMetricEnabledStates { get; init; } = Array.Empty<bool>();
         public bool[] RtssMetricEnabledStates { get; init; } = Array.Empty<bool>();
     }
@@ -94,6 +96,8 @@ namespace PCStatsTray
             config.CpuFanSensorKey = state.CpuFanSensorKey;
             config.GpuFanSensorKey = state.GpuFanSensorKey;
             config.CaseFanSensorKey = state.CaseFanSensorKey;
+            config.StorageSourceKey = state.StorageSourceKey;
+            config.NetworkSourceKey = state.NetworkSourceKey;
 
             for (int i = 0; i < config.Metrics.Count; i++)
             {

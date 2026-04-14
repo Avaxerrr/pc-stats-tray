@@ -129,7 +129,9 @@
   }
 
   function refresh() {
-    setStatus("connecting", "[ CONNECTING... ]");
+    if (!latestSnapshot) {
+      setStatus("connecting", "[ CONNECTING... ]");
+    }
 
     fetchWithTimeout("/api/metrics", 3500)
       .then(function (response) {
@@ -159,7 +161,9 @@
 
   function handleSnapshot(snapshot) {
     var previousSnapshot = latestSnapshot;
-    document.title = (snapshot.machineName || "PC Stats Tray") + " Terminal Dashboard";
+    document.title = snapshot.machineName
+      ? "PC Stats Tray - " + snapshot.machineName
+      : "PC Stats Tray";
 
     setStatus("online", "[ ACTIVE - STREAMING ]");
     clearError();
@@ -298,44 +302,65 @@
     }
 
     els.toggleGrid.innerHTML = "";
+    var grouped = groupMetrics(metrics);
 
-    metrics.forEach(function (metric) {
-      var wrapper = document.createElement("label");
-      wrapper.className = "toggle-card";
+    Object.keys(grouped).forEach(function (groupName) {
+      var section = document.createElement("section");
+      section.className = "routing-group";
 
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = isVisible(metric);
-      input.addEventListener("change", function () {
-        visibility[metric.key] = input.checked;
-        persistVisibility();
-        if (latestSnapshot) {
-          fullRender(latestSnapshot);
-        }
+      var heading = document.createElement("div");
+      heading.className = "routing-group-heading";
+      heading.textContent = "[ " + codeLabel(groupName) + " ]";
+
+      var grid = document.createElement("div");
+      grid.className = "routing-group-grid";
+
+      grouped[groupName].forEach(function (metric) {
+        grid.appendChild(createToggleCard(metric));
       });
 
-      var surface = document.createElement("span");
-      surface.className = "toggle-surface";
-
-      var label = document.createElement("span");
-      label.className = "toggle-label";
-      label.textContent = codeLabel(metric.label);
-
-      var state = document.createElement("span");
-      state.className = "toggle-state";
-      state.textContent = input.checked ? "[x]" : "[ ]";
-
-      input.addEventListener("change", function () {
-        state.textContent = input.checked ? "[x]" : "[ ]";
-      });
-
-      surface.appendChild(label);
-      surface.appendChild(state);
-      wrapper.appendChild(input);
-      wrapper.appendChild(surface);
-
-      els.toggleGrid.appendChild(wrapper);
+      section.appendChild(heading);
+      section.appendChild(grid);
+      els.toggleGrid.appendChild(section);
     });
+  }
+
+  function createToggleCard(metric) {
+    var wrapper = document.createElement("label");
+    wrapper.className = "toggle-card";
+
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = isVisible(metric);
+    input.addEventListener("change", function () {
+      visibility[metric.key] = input.checked;
+      persistVisibility();
+      if (latestSnapshot) {
+        fullRender(latestSnapshot);
+      }
+    });
+
+    var surface = document.createElement("span");
+    surface.className = "toggle-surface";
+
+    var label = document.createElement("span");
+    label.className = "toggle-label";
+    label.textContent = buildToggleLabel(metric);
+
+    var state = document.createElement("span");
+    state.className = "toggle-state";
+    state.textContent = input.checked ? "[x]" : "[ ]";
+
+    input.addEventListener("change", function () {
+      state.textContent = input.checked ? "[x]" : "[ ]";
+    });
+
+    surface.appendChild(label);
+    surface.appendChild(state);
+    wrapper.appendChild(input);
+    wrapper.appendChild(surface);
+
+    return wrapper;
   }
 
   function renderEmptyState(title, copyHtml) {
@@ -403,6 +428,9 @@
     card.style.animationDelay = String(animationIndex * 0.04) + "s";
 
     card.innerHTML =
+      (metric.sourceName
+        ? "<div class=\"card-source\" title=\"" + escapeAttribute(metric.sourceName) + "\">" + escapeHtml(metric.sourceName) + "</div>"
+        : "") +
       "<div class=\"card-code\" title=\"" + escapeAttribute(metric.label) + "\">&gt; " + escapeHtml(codeLabel(metric.label)) + "</div>" +
       "<div class=\"card-value-shell\">" +
       "<div id=\"val-" + escapeAttribute(metric.key) + "\" class=\"metric-value " + analysis.valueClass + "\">" +
@@ -593,6 +621,14 @@
       .replace(/_+/g, "_")
       .replace(/^_+|_+$/g, "")
       .toUpperCase();
+  }
+
+  function buildToggleLabel(metric) {
+    if (metric && metric.sourceName) {
+      return codeLabel(metric.sourceName) + " // " + codeLabel(metric.label);
+    }
+
+    return codeLabel(metric.label);
   }
 
   function persistVisibility() {

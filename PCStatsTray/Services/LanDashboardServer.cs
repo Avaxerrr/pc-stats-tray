@@ -207,6 +207,14 @@ namespace PCStatsTray
                         return;
                     }
 
+#if DEBUG
+                    if (path.Equals("/dev/api", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await WriteResponseAsync(stream, "200 OK", "text/html; charset=utf-8", BuildDevApiHtml(), cancellationToken);
+                        return;
+                    }
+#endif
+
                     if (path.Equals("/api/health", StringComparison.OrdinalIgnoreCase))
                     {
                         await WriteResponseAsync(stream, "200 OK", "application/json; charset=utf-8", "{\"status\":\"ok\"}", cancellationToken);
@@ -426,6 +434,38 @@ namespace PCStatsTray
                 $"<h1>Missing asset</h1><p>The dashboard asset <strong>{assetFileName}</strong> was not found in the app output folder.</p>" +
                 "<p>Rebuild the app so the <code>Web</code> assets are copied next to the executable.</p></body></html>";
         }
+
+#if DEBUG
+        private static string BuildDevApiHtml()
+        {
+            return
+                "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+                "<title>PC Stats Tray API Dev View</title>" +
+                "<style>" +
+                "body{margin:0;padding:20px;font:14px/1.5 Consolas,Monaco,monospace;background:#0b1020;color:#e5eefc;}" +
+                ".shell{max-width:1100px;margin:0 auto;}" +
+                ".bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}" +
+                ".pill{padding:6px 10px;border:1px solid #294060;background:#10192d;color:#91d5ff;border-radius:999px;}" +
+                "button{padding:8px 12px;border:1px solid #2b8a3e;background:#12331c;color:#d3f9d8;border-radius:8px;cursor:pointer;font:inherit;}" +
+                "button:hover{background:#184926;}" +
+                "pre{margin:0;padding:18px;border:1px solid #24344d;background:#09101d;border-radius:12px;overflow:auto;white-space:pre-wrap;word-break:break-word;}" +
+                ".status-ok{color:#8ce99a;}.status-bad{color:#ffa8a8;}" +
+                "</style></head><body><div class=\"shell\">" +
+                "<div class=\"bar\"><span class=\"pill\">DEV API VIEW</span><span id=\"status\" class=\"pill\">connecting</span><span id=\"updated\" class=\"pill\">--</span><button id=\"refresh\" type=\"button\">Refresh now</button></div>" +
+                "<pre id=\"json\">Loading /api/metrics...</pre></div>" +
+                "<script>" +
+                "const statusEl=document.getElementById('status');" +
+                "const updatedEl=document.getElementById('updated');" +
+                "const jsonEl=document.getElementById('json');" +
+                "const refreshBtn=document.getElementById('refresh');" +
+                "let timer=null;" +
+                "function stamp(){return new Date().toLocaleTimeString();}" +
+                "async function load(){try{statusEl.textContent='loading';statusEl.className='pill';const response=await fetch('/api/metrics',{cache:'no-store'});if(!response.ok){throw new Error('HTTP '+response.status);}const data=await response.json();jsonEl.textContent=JSON.stringify(data,null,2);statusEl.textContent='ok';statusEl.className='pill status-ok';updatedEl.textContent='updated '+stamp();const next=(data&&data.refreshIntervalMs?data.refreshIntervalMs:1000);clearTimeout(timer);timer=setTimeout(load,next);}catch(error){jsonEl.textContent=String(error&&error.stack?error.stack:error);statusEl.textContent='error';statusEl.className='pill status-bad';updatedEl.textContent='updated '+stamp();clearTimeout(timer);timer=setTimeout(load,3000);}}" +
+                "refreshBtn.addEventListener('click',load);" +
+                "load();" +
+                "</script></body></html>";
+        }
+#endif
 
         private static string? GetPreferredLanIp()
         {
