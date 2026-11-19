@@ -20,7 +20,7 @@ namespace PCStatsTray
         public string Label { get; init; } = string.Empty;
         public string Group { get; init; } = string.Empty;
         public string SourceName { get; init; } = string.Empty;
-        public string? Value { get; init; }
+        public required MetricReading Reading { get; init; }
         public bool DefaultVisible { get; init; }
     }
 
@@ -42,9 +42,9 @@ namespace PCStatsTray
             "NetworkUpload"
         };
 
-        public static DashboardSnapshot Build(Computer computer, OverlayConfig config, int refreshIntervalMs)
+        public static DashboardSnapshot Build(
+            Computer computer, IReadOnlyDictionary<string, MetricReading> currentValues, int refreshIntervalMs)
         {
-            var currentValues = OverlayMetricCollector.Collect(computer, config, useOverlayDisplayModes: false);
             var runtimeSourceNames = BuildRuntimeSourceNames(computer);
             var metrics = BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: false, runtimeSourceNames);
             metrics.AddRange(BuildStorageMetricValues(computer));
@@ -52,7 +52,7 @@ namespace PCStatsTray
             return Build(metrics, refreshIntervalMs);
         }
 
-        internal static DashboardSnapshot Build(OverlayConfig config, IReadOnlyDictionary<string, string> currentValues, int refreshIntervalMs)
+        internal static DashboardSnapshot Build(IReadOnlyDictionary<string, MetricReading> currentValues, int refreshIntervalMs)
         {
             return Build(BuildStaticMetricValues(currentValues, includeDeviceSpecificMetrics: true), refreshIntervalMs);
         }
@@ -71,7 +71,10 @@ namespace PCStatsTray
                         Label = metric.Label,
                         Group = metric.Group,
                         SourceName = metric.SourceName,
-                        Value = metric.Value,
+                        Value = metric.Reading.DisplayValue,
+                        NumericValue = FiniteValue(metric.Reading.NumericValue),
+                        Unit = metric.Reading.Unit,
+                        TotalValue = FiniteValue(metric.Reading.TotalValue),
                         Available = true,
                         DefaultVisible = metric.DefaultVisible
                     })
@@ -79,8 +82,11 @@ namespace PCStatsTray
             };
         }
 
+        private static double? FiniteValue(double? value) =>
+            value is double number && double.IsFinite(number) ? number : null;
+
         private static List<DashboardMetricValue> BuildStaticMetricValues(
-            IReadOnlyDictionary<string, string> currentValues,
+            IReadOnlyDictionary<string, MetricReading> currentValues,
             bool includeDeviceSpecificMetrics,
             IReadOnlyDictionary<string, string>? sourceNameByKey = null)
         {
@@ -95,7 +101,7 @@ namespace PCStatsTray
                     SourceName = sourceNameByKey != null && sourceNameByKey.TryGetValue(metric.Key, out string? sourceName)
                         ? sourceName
                         : string.Empty,
-                    Value = currentValues.TryGetValue(metric.Key, out string? value) ? value : null,
+                    Reading = currentValues[metric.Key],
                     DefaultVisible = metric.DefaultVisible
                 })
                 .ToList();
@@ -163,7 +169,7 @@ namespace PCStatsTray
                         "StorageTemp",
                         sourceKey,
                         sourceName,
-                        $"{preferredTemperature.Value.Value:0}\u00B0C"));
+                        MetricReading.Scalar(preferredTemperature.Value.Value, "°C", "0")));
                 }
 
                 var activity = FindPreferredSensor(
@@ -177,7 +183,7 @@ namespace PCStatsTray
                         "StorageLoad",
                         sourceKey,
                         sourceName,
-                        $"{activity.Value.Value:0}%"));
+                        MetricReading.Scalar(activity.Value.Value, "%", "0")));
                 }
 
                 var read = FindPreferredSensor(
@@ -190,7 +196,7 @@ namespace PCStatsTray
                         "StorageRead",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(read.Value.Value)));
+                        OverlayMetricCollector.ReadThroughput(read.Value.Value)));
                 }
 
                 var write = FindPreferredSensor(
@@ -203,7 +209,7 @@ namespace PCStatsTray
                         "StorageWrite",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(write.Value.Value)));
+                        OverlayMetricCollector.ReadThroughput(write.Value.Value)));
                 }
             }
 
@@ -239,7 +245,7 @@ namespace PCStatsTray
                         "NetworkDownload",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(download.Value.Value),
+                        OverlayMetricCollector.ReadThroughput(download.Value.Value),
                         IsPreferredNetworkSource(sourceName)));
                 }
 
@@ -254,7 +260,7 @@ namespace PCStatsTray
                         "NetworkUpload",
                         sourceKey,
                         sourceName,
-                        FormatThroughput(upload.Value.Value),
+                        OverlayMetricCollector.ReadThroughput(upload.Value.Value),
                         IsPreferredNetworkSource(sourceName)));
                 }
             }
@@ -262,9 +268,9 @@ namespace PCStatsTray
             return metrics;
         }
 
-        private static DashboardMetricValue CreateStorageMetricValue(string baseKey, string sourceKey, string sourceName, string value)
+        private static DashboardMetricValue CreateStorageMetricValue(string baseKey, string sourceKey, string sourceName, MetricReading reading)
         {
-            return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value);
+            return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, reading);
         }
 
         private static void AssignCpuMetricSources(IDictionary<string, string> sourceNames, IHardware hardware)
@@ -491,17 +497,12 @@ namespace PCStatsTray
             }
         }
 
-        private static DashboardMetricValue CreateDeviceMetricValue(string baseKey, string sourceKey, string sourceName, string value)
-        {
-            return CreateDeviceMetricValue(baseKey, sourceKey, sourceName, value, defaultVisibleOverride: null);
-        }
-
         private static DashboardMetricValue CreateDeviceMetricValue(
             string baseKey,
             string sourceKey,
             string sourceName,
-            string value,
-            bool? defaultVisibleOverride)
+            MetricReading reading,
+            bool? defaultVisibleOverride = null)
         {
             DashboardMetricDefinition definition = DashboardMetricCatalog.GetDefinitions()
                 .First(metric => string.Equals(metric.Key, baseKey, StringComparison.OrdinalIgnoreCase));
@@ -512,7 +513,7 @@ namespace PCStatsTray
                 Label = definition.Label,
                 Group = definition.Group,
                 SourceName = sourceName,
-                Value = value,
+                Reading = reading,
                 DefaultVisible = defaultVisibleOverride ?? definition.DefaultVisible
             };
         }
@@ -758,28 +759,5 @@ namespace PCStatsTray
             return 50;
         }
 
-        private static string FormatThroughput(double bytesPerSecond)
-        {
-            const double kilobyte = 1024d;
-            const double megabyte = kilobyte * 1024d;
-            const double gigabyte = megabyte * 1024d;
-
-            if (bytesPerSecond >= gigabyte)
-            {
-                return $"{bytesPerSecond / gigabyte:0.##} GB/s";
-            }
-
-            if (bytesPerSecond >= megabyte)
-            {
-                return $"{bytesPerSecond / megabyte:0.##} MB/s";
-            }
-
-            if (bytesPerSecond >= kilobyte)
-            {
-                return $"{bytesPerSecond / kilobyte:0.##} KB/s";
-            }
-
-            return $"{bytesPerSecond:0} B/s";
-        }
     }
 }

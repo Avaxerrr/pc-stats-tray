@@ -6,25 +6,15 @@ namespace PCStatsTray.Tests
     public class DashboardSnapshotBuilderTests
     {
         [TestMethod]
-        public void Build_UsesDashboardCatalogInsteadOfOverlaySelection()
+        public void Build_UsesDashboardCatalogAndPreservesNumericReadings()
         {
-            var config = new OverlayConfig
-            {
-                Metrics = new List<OverlayMetric>
-                {
-                    new("CpuTemp", "CPU Temp", true),
-                    new("GpuLoad", "GPU Load", false)
-                }
-            };
-
             var snapshot = DashboardSnapshotBuilder.Build(
-                config,
-                new Dictionary<string, string>
+                new Dictionary<string, MetricReading>
                 {
-                    ["CpuTemp"] = "72\u00B0C",
-                    ["GpuLoad"] = "91%",
-                    ["CpuClock"] = "5200 MHz",
-                    ["CpuClockEffectiveAvg"] = "4100 MHz"
+                    ["CpuTemp"] = MetricReading.Scalar(71.75f, "°C", "0"),
+                    ["GpuLoad"] = MetricReading.Scalar(91, "%", "0"),
+                    ["CpuClock"] = MetricReading.Scalar(5200, "MHz", "0"),
+                    ["CpuClockEffectiveAvg"] = MetricReading.Scalar(4100, "MHz", "0")
                 },
                 1000);
 
@@ -34,6 +24,8 @@ namespace PCStatsTray.Tests
             var cpuTemp = snapshot.Metrics.Single(metric => metric.Key == "CpuTemp");
             Assert.AreEqual("CPU", cpuTemp.Group);
             Assert.AreEqual("72\u00B0C", cpuTemp.Value);
+            Assert.AreEqual(71.75, cpuTemp.NumericValue);
+            Assert.AreEqual("°C", cpuTemp.Unit);
             Assert.AreEqual(string.Empty, cpuTemp.SourceName);
             Assert.IsTrue(cpuTemp.Available);
             Assert.IsTrue(cpuTemp.DefaultVisible);
@@ -65,7 +57,7 @@ namespace PCStatsTray.Tests
                         Label = "Storage Temp",
                         Group = "Storage",
                         SourceName = "Samsung SSD 990 PRO",
-                        Value = "56\u00B0C",
+                        Reading = MetricReading.Scalar(56, "°C", "0"),
                         DefaultVisible = true
                     },
                     new DashboardMetricValue
@@ -74,7 +66,7 @@ namespace PCStatsTray.Tests
                         Label = "Storage Temp",
                         Group = "Storage",
                         SourceName = "Samsung SSD 990 PRO #2",
-                        Value = "49\u00B0C",
+                        Reading = MetricReading.Scalar(49, "°C", "0"),
                         DefaultVisible = true
                     }
                 },
@@ -104,7 +96,7 @@ namespace PCStatsTray.Tests
                         Label = "Network Down",
                         Group = "Network",
                         SourceName = "Intel Wi-Fi 6 AX201",
-                        Value = "12.4 MB/s",
+                        Reading = new MetricReading("12.4 MB/s", 13_002_342, "B/s"),
                         DefaultVisible = true
                     },
                     new DashboardMetricValue
@@ -113,7 +105,7 @@ namespace PCStatsTray.Tests
                         Label = "Network Up",
                         Group = "Network",
                         SourceName = "Realtek Gaming 2.5GbE",
-                        Value = "522 KB/s",
+                        Reading = new MetricReading("522 KB/s", 534_528, "B/s"),
                         DefaultVisible = true
                     }
                 },
@@ -143,7 +135,7 @@ namespace PCStatsTray.Tests
                         Label = "Network Down",
                         Group = "Network",
                         SourceName = "Wi-Fi",
-                        Value = "12.4 MB/s",
+                        Reading = new MetricReading("12.4 MB/s", 13_002_342, "B/s"),
                         DefaultVisible = true
                     },
                     new DashboardMetricValue
@@ -152,7 +144,7 @@ namespace PCStatsTray.Tests
                         Label = "Network Down",
                         Group = "Network",
                         SourceName = "Wi-Fi-WFP Native MAC Layer LightWeight Filter-0000",
-                        Value = "12.4 MB/s",
+                        Reading = new MetricReading("12.4 MB/s", 13_002_342, "B/s"),
                         DefaultVisible = false
                     }
                 },
@@ -177,7 +169,7 @@ namespace PCStatsTray.Tests
                         Label = "CPU Temp",
                         Group = "CPU",
                         SourceName = "AMD Ryzen 9 7940HS",
-                        Value = "74\u00B0C",
+                        Reading = MetricReading.Scalar(74, "°C", "0"),
                         DefaultVisible = true
                     },
                     new DashboardMetricValue
@@ -186,7 +178,7 @@ namespace PCStatsTray.Tests
                         Label = "GPU Temp",
                         Group = "GPU",
                         SourceName = "NVIDIA GeForce RTX 4060 Laptop GPU",
-                        Value = "61\u00B0C",
+                        Reading = MetricReading.Scalar(61, "°C", "0"),
                         DefaultVisible = true
                     },
                     new DashboardMetricValue
@@ -195,7 +187,7 @@ namespace PCStatsTray.Tests
                         Label = "Battery Level",
                         Group = "Power",
                         SourceName = "Internal Battery",
-                        Value = "55%",
+                        Reading = MetricReading.Scalar(55, "%", "0"),
                         DefaultVisible = true
                     }
                 },

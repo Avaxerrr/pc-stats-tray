@@ -76,31 +76,30 @@ If you only want the LAN dashboard, you also do not need RTSS.
 6. Choose the metrics you want.
 7. Turn on `Desktop OSD` if you want stats on your desktop.
 8. Turn on `RTSS OSD (Games)` only if RTSS is installed and open.
-9. Turn on `Enable LAN Dashboard` in the tray menu if you want phone/browser viewing.
+9. Choose a mode under **Show Stats** in the tray menu.
 10. Changes apply immediately.
 
-## LAN dashboard and local API
+## Dashboard and metrics API
 
-Do this:
+In PC Stats Tray 0.7.1, the tray menu offers three **Show Stats** options:
 
-1. Run `PCStatsTray.exe`.
-2. Right-click the tray icon.
-3. Turn on `Enable LAN Dashboard`.
-4. Use `Open LAN Dashboard` on this PC, or `Copy Dashboard URL` to open it from your phone on the same network.
-5. Open the copied URL in your browser.
+- **Off** is the default for new installations. The desktop and RTSS overlays still work.
+- **Local apps** serves the dashboard and metrics API on `127.0.0.1` so other apps on the PC can read the stats.
+- **Dashboard** also allows devices that can reach the PC over the network to open the dashboard or read its API without signing in. Use this on trusted networks.
 
-Useful endpoints:
+The old **Enable LAN Dashboard** setting migrates to **Dashboard** when enabled and **Off** when disabled. **Open Dashboard** opens it locally. **Copy Dashboard URL** copies the network address in **Dashboard** mode when one is available.
 
-- `/` dashboard UI
-- `/api/metrics` current metric snapshot as JSON
-- `/api/health` simple health check
+The default port is `4587`. Use `http://127.0.0.1:4587/` on the PC, or the copied URL on another device when **Dashboard** is enabled.
 
-Notes:
+| Path | Response |
+| --- | --- |
+| `/` | Standalone dashboard with default and expanded views |
+| `/api/metrics` | Latest read-only JSON snapshot, shared by the dashboard and integration clients |
+| `/api/health` | Listener health check |
 
-- the dashboard and API are read-only
-- they are intended for trusted local networks
-- the dashboard shows a broader curated metric set than the desktop OSD by default
-- the dashboard remembers hidden and shown metrics per browser
+The refresh interval in `refreshIntervalMs` follows the selected 1-, 2-, or 5-second tray setting. Use `generatedAtUtc` to identify a new sample. Multiple readers reuse the cached snapshot.
+
+Each entry in `metrics` has a `key`, `label`, `group`, `sourceName`, display string `value`, `available`, and `defaultVisible`. Use `defaultVisible` for the curated view. For charts, use `numericValue` and `unit`; throughput uses bytes per second (`B/s`) even when the display scales it to MB/s or GB/s. For RAM and VRAM usage, `totalValue` is included when the total is known, in the same unit as the used amount. Treat missing metrics and null numeric values as unavailable. The dashboard remembers metric visibility per browser.
 
 ## First run and CPU sensors
 

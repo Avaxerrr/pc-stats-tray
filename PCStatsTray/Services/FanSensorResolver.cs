@@ -7,7 +7,7 @@ namespace PCStatsTray
 {
     internal static class FanSensorResolver
     {
-        public static void PopulateFanMetrics(Computer computer, OverlayConfig config, IDictionary<string, string> currentValues)
+        public static void PopulateFanMetrics(Computer computer, OverlayConfig config, IDictionary<string, MetricReading> currentValues)
         {
             ISensor? cpuFan = null;
             ISensor? gpuFan = null;
@@ -30,17 +30,17 @@ namespace PCStatsTray
 
             if (cpuFan?.Value.HasValue == true)
             {
-                currentValues["CpuFan"] = $"{cpuFan.Value.Value:0} RPM";
+                currentValues["CpuFan"] = MetricReading.Scalar(cpuFan.Value.Value, "RPM", "0");
             }
 
             if (gpuFan?.Value.HasValue == true)
             {
-                currentValues["GpuFan"] = $"{gpuFan.Value.Value:0} RPM";
+                currentValues["GpuFan"] = MetricReading.Scalar(gpuFan.Value.Value, "RPM", "0");
             }
 
             if (caseFan?.Value.HasValue == true)
             {
-                currentValues["CaseFan"] = $"{caseFan.Value.Value:0} RPM";
+                currentValues["CaseFan"] = MetricReading.Scalar(caseFan.Value.Value, "RPM", "0");
             }
         }
 

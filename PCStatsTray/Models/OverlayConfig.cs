@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace PCStatsTray
 {
@@ -15,6 +16,14 @@ namespace PCStatsTray
     {
         Desktop,
         Rtss
+    }
+
+    [JsonConverter(typeof(JsonStringEnumConverter<DashboardAccessMode>))]
+    public enum DashboardAccessMode
+    {
+        Off,
+        ThisPcOnly,
+        LocalNetwork
     }
 
     /// <summary>
@@ -111,7 +120,10 @@ namespace PCStatsTray
         public int SettingsWindowY { get; set; } = -1;
         public int SettingsWindowWidth { get; set; } = 420;
         public int SettingsWindowHeight { get; set; } = 840;
-        public bool PhoneDashboardEnabled { get; set; }
+        public DashboardAccessMode? DashboardAccess { get; set; }
+        [JsonPropertyName("PhoneDashboardEnabled")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? LegacyPhoneDashboardEnabled { get; set; }
         public int PhoneDashboardPort { get; set; } = 4587;
         public string CpuFanSensorKey { get; set; } = string.Empty;
         public string GpuFanSensorKey { get; set; } = string.Empty;
@@ -249,6 +261,15 @@ namespace PCStatsTray
 
         public void NormalizeDashboard()
         {
+            DashboardAccess ??= LegacyPhoneDashboardEnabled == true
+                ? DashboardAccessMode.LocalNetwork
+                : DashboardAccessMode.Off;
+            if (!Enum.IsDefined(DashboardAccess.Value))
+            {
+                DashboardAccess = DashboardAccessMode.Off;
+            }
+            LegacyPhoneDashboardEnabled = null;
+
             if (PhoneDashboardPort is < 1024 or > 65535)
             {
                 PhoneDashboardPort = 4587;
