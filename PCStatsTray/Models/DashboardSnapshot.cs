@@ -3,6 +3,16 @@ using System.Collections.Generic;
 
 namespace PCStatsTray
 {
+    internal readonly record struct MetricReading(
+        string DisplayValue, double NumericValue, string Unit, double? TotalValue = null)
+    {
+        public static MetricReading Scalar(float value, string unit, string format)
+        {
+            string separator = unit is "%" or "°C" ? string.Empty : " ";
+            return new MetricReading(value.ToString(format) + separator + unit, value, unit);
+        }
+    }
+
     internal sealed class DashboardSnapshot
     {
         public DateTimeOffset GeneratedAtUtc { get; init; } = DateTimeOffset.UtcNow;
@@ -18,6 +28,9 @@ namespace PCStatsTray
         public string Group { get; init; } = string.Empty;
         public string SourceName { get; init; } = string.Empty;
         public string? Value { get; init; }
+        public double? NumericValue { get; init; }
+        public string? Unit { get; init; }
+        public double? TotalValue { get; init; }
         public bool Available { get; init; }
         public bool DefaultVisible { get; init; }
     }

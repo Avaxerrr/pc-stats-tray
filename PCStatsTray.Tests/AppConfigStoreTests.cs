@@ -22,7 +22,7 @@ namespace PCStatsTray.Tests
                     RtssHotkeyDisplay = "Ctrl+Alt+Shift+F10",
                     VramDisplayMode = OverlayConfig.VramDisplayPercentage,
                     RefreshIntervalMs = 5000,
-                    PhoneDashboardEnabled = true,
+                    DashboardAccess = DashboardAccessMode.ThisPcOnly,
                     PhoneDashboardPort = 4588
                 };
 
@@ -38,7 +38,7 @@ namespace PCStatsTray.Tests
                 Assert.AreEqual("Ctrl+Alt+Shift+F10", reloadedOverlay.RtssHotkeyDisplay);
                 Assert.AreEqual(OverlayConfig.VramDisplayPercentage, reloadedOverlay.VramDisplayMode);
                 Assert.AreEqual(5000, reloadedOverlay.RefreshIntervalMs);
-                Assert.IsTrue(reloadedOverlay.PhoneDashboardEnabled);
+                Assert.AreEqual(DashboardAccessMode.ThisPcOnly, reloadedOverlay.DashboardAccess);
                 Assert.AreEqual(4588, reloadedOverlay.PhoneDashboardPort);
             }
             finally
@@ -47,6 +47,26 @@ namespace PCStatsTray.Tests
                 {
                     File.Delete(path);
                 }
+            }
+        }
+
+        [TestMethod]
+        [DataRow(false, DashboardAccessMode.Off)]
+        [DataRow(true, DashboardAccessMode.LocalNetwork)]
+        public void LoadOverlayConfig_MigratesLegacyDashboardSetting(bool enabled, DashboardAccessMode expected)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+            try
+            {
+                File.WriteAllText(path, $$"""
+                    { "Overlay": { "PhoneDashboardEnabled": {{(enabled ? "true" : "false")}} } }
+                    """);
+
+                Assert.AreEqual(expected, AppConfigStore.LoadOverlayConfig(path).DashboardAccess);
+            }
+            finally
+            {
+                File.Delete(path);
             }
         }
 
@@ -149,13 +169,13 @@ namespace PCStatsTray.Tests
             {
                 AppConfigStore.SaveOverlayConfig(path, new OverlayConfig
                 {
-                    PhoneDashboardEnabled = true,
+                    DashboardAccess = DashboardAccessMode.LocalNetwork,
                     PhoneDashboardPort = 99999
                 });
 
                 var overlay = AppConfigStore.LoadOverlayConfig(path);
 
-                Assert.IsTrue(overlay.PhoneDashboardEnabled);
+                Assert.AreEqual(DashboardAccessMode.LocalNetwork, overlay.DashboardAccess);
                 Assert.AreEqual(4587, overlay.PhoneDashboardPort);
             }
             finally

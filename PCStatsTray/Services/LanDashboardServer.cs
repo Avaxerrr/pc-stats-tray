@@ -28,6 +28,7 @@ namespace PCStatsTray
         private CancellationTokenSource? _cts;
         private Task? _acceptLoopTask;
         private int _port = 4587;
+        private DashboardAccessMode _accessMode;
 
         public bool IsRunning { get; private set; }
         public string? LastError { get; private set; }
@@ -45,18 +46,18 @@ namespace PCStatsTray
         {
             config.NormalizeDashboard();
 
-            if (!config.PhoneDashboardEnabled)
+            if (config.DashboardAccess is not (DashboardAccessMode.ThisPcOnly or DashboardAccessMode.LocalNetwork))
             {
                 Stop();
                 return;
             }
 
-            if (IsRunning && _port == config.PhoneDashboardPort)
+            if (IsRunning && _port == config.PhoneDashboardPort && _accessMode == config.DashboardAccess)
             {
                 return;
             }
 
-            Restart(config.PhoneDashboardPort);
+            Restart(config.PhoneDashboardPort, config.DashboardAccess.Value);
         }
 
         public string GetLocalUrl()
@@ -66,6 +67,11 @@ namespace PCStatsTray
 
         public string? GetLanUrl()
         {
+            if (_accessMode != DashboardAccessMode.LocalNetwork)
+            {
+                return null;
+            }
+
             string? ip = GetPreferredLanIp();
             return ip == null ? null : $"http://{ip}:{_port}/";
         }
@@ -84,6 +90,7 @@ namespace PCStatsTray
                 _listener = null;
                 _cts = null;
                 _acceptLoopTask = null;
+                _accessMode = DashboardAccessMode.Off;
                 IsRunning = false;
                 LastError = null;
             }
@@ -108,26 +115,27 @@ namespace PCStatsTray
             Stop();
         }
 
-        private void Restart(int port)
+        private void Restart(int port, DashboardAccessMode accessMode)
         {
             Stop();
 
             try
             {
-                var listener = new TcpListener(IPAddress.Any, port);
+                IPAddress address = accessMode == DashboardAccessMode.LocalNetwork ? IPAddress.Any : IPAddress.Loopback;
+                var listener = new TcpListener(address, port);
                 listener.Start();
 
                 var cts = new CancellationTokenSource();
-                var acceptLoopTask = Task.Run(() => AcceptLoopAsync(listener, cts.Token));
 
                 lock (_sync)
                 {
                     _listener = listener;
                     _cts = cts;
-                    _acceptLoopTask = acceptLoopTask;
                     _port = port;
+                    _accessMode = accessMode;
                     IsRunning = true;
                     LastError = null;
+                    _acceptLoopTask = Task.Run(() => AcceptLoopAsync(listener, cts.Token));
                 }
             }
             catch (Exception ex)
@@ -148,7 +156,7 @@ namespace PCStatsTray
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
-                    _ = Task.Run(() => HandleClientAsync(client, cancellationToken), cancellationToken);
+                    _ = HandleClientAsync(client, cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -161,8 +169,12 @@ namespace PCStatsTray
             {
                 lock (_sync)
                 {
-                    IsRunning = false;
-                    LastError = ex.Message;
+                    if (ReferenceEquals(_listener, listener))
+                    {
+                        IsRunning = false;
+                        _accessMode = DashboardAccessMode.Off;
+                        LastError = ex.Message;
+                    }
                 }
             }
         }

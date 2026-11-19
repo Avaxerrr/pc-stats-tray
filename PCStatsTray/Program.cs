@@ -25,7 +25,6 @@ namespace PCStatsTray
     {
         private const int SM_CXSMICON = 49;
         private const int SM_CYSMICON = 50;
-        private const int DefaultRefreshIntervalMs = 1000;
 
         private static NotifyIcon cpuTrayIcon = null!;
         private static NotifyIcon gpuTrayIcon = null!;
@@ -93,10 +92,7 @@ namespace PCStatsTray
             overlayConfig = AppConfigStore.LoadOverlayConfig(AppConfigStore.DefaultPath);
 
             lanDashboardServer = new LanDashboardServer();
-            lanDashboardServer.ApplyConfig(overlayConfig);
-
             contextMenu = new ContextMenuStrip();
-            PopulateInitialMenu();
 
             cpuTrayIcon = new NotifyIcon
             {
@@ -127,6 +123,8 @@ namespace PCStatsTray
             refreshTimer.Start();
 
             RefreshAllData();
+            lanDashboardServer.ApplyConfig(overlayConfig);
+            PopulateInitialMenu();
             ApplyOverlayOutputs();
             MaybeShowPawnIoPrompt();
 
@@ -206,23 +204,30 @@ namespace PCStatsTray
 
             contextMenu.Items.Add(new ToolStripSeparator());
 
-            var togglePhoneDashboardItem = new ToolStripMenuItem("Enable LAN Dashboard")
+            var dashboardAccessItem = new ToolStripMenuItem("Show Stats");
+            foreach (var (mode, label) in new[]
             {
-                Checked = overlayConfig.PhoneDashboardEnabled
-            };
-            togglePhoneDashboardItem.Click += (s, e) => TogglePhoneDashboard();
-            contextMenu.Items.Add(togglePhoneDashboardItem);
+                (DashboardAccessMode.Off, "Off"),
+                (DashboardAccessMode.ThisPcOnly, "Local apps"),
+                (DashboardAccessMode.LocalNetwork, "Apps + Dashboard")
+            })
+            {
+                var item = new ToolStripMenuItem(label) { Checked = overlayConfig.DashboardAccess == mode };
+                item.Click += (s, e) => SetDashboardAccess(mode);
+                dashboardAccessItem.DropDownItems.Add(item);
+            }
+            contextMenu.Items.Add(dashboardAccessItem);
 
-            var openPhoneDashboardItem = new ToolStripMenuItem("Open LAN Dashboard")
+            var openPhoneDashboardItem = new ToolStripMenuItem("Open Dashboard")
             {
-                Enabled = overlayConfig.PhoneDashboardEnabled && lanDashboardServer?.IsRunning == true
+                Enabled = lanDashboardServer?.IsRunning == true
             };
             openPhoneDashboardItem.Click += (s, e) => OpenPhoneDashboard();
             contextMenu.Items.Add(openPhoneDashboardItem);
 
             var copyPhoneDashboardUrlItem = new ToolStripMenuItem("Copy Dashboard URL")
             {
-                Enabled = overlayConfig.PhoneDashboardEnabled && lanDashboardServer?.IsRunning == true
+                Enabled = lanDashboardServer?.IsRunning == true
             };
             copyPhoneDashboardUrlItem.Click += (s, e) => CopyPhoneDashboardUrl();
             contextMenu.Items.Add(copyPhoneDashboardUrlItem);
@@ -281,9 +286,9 @@ namespace PCStatsTray
             PopulateInitialMenu();
         }
 
-        private static void TogglePhoneDashboard()
+        private static void SetDashboardAccess(DashboardAccessMode mode)
         {
-            overlayConfig.PhoneDashboardEnabled = !overlayConfig.PhoneDashboardEnabled;
+            overlayConfig.DashboardAccess = mode;
             lanDashboardServer?.ApplyConfig(overlayConfig);
             AppConfigStore.SaveOverlayConfig(AppConfigStore.DefaultPath, overlayConfig);
             PopulateInitialMenu();
@@ -303,7 +308,7 @@ namespace PCStatsTray
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to open the LAN dashboard: " + ex.Message, "LAN Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Failed to open the dashboard: " + ex.Message, "Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -321,7 +326,7 @@ namespace PCStatsTray
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to copy the dashboard URL: " + ex.Message, "LAN Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Failed to copy the dashboard URL: " + ex.Message, "Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -350,7 +355,6 @@ namespace PCStatsTray
             hotkeyService?.ApplyConfig(config);
             lanDashboardServer?.ApplyConfig(config);
             RefreshCollectedMetrics();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
 
             // Update overlay
             if (overlayForm != null && !overlayForm.IsDisposed)
@@ -420,7 +424,6 @@ namespace PCStatsTray
             cpuSensorSetupStatus = CpuSensorSetupAdvisor.Evaluate(computer);
             RefreshCollectedMetrics();
             CaptureLatestTemperatures();
-            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, overlayConfig, refreshTimer?.Interval ?? DefaultRefreshIntervalMs));
             UpdateCpuSensorSetupMenu();
             UpdateIcon();
 
@@ -434,12 +437,13 @@ namespace PCStatsTray
 
         private static void RefreshCollectedMetrics()
         {
-            var raw = OverlayMetricCollector.Collect(computer, overlayConfig, useOverlayDisplayModes: false);
+            var raw = OverlayMetricCollector.CollectReadings(computer, overlayConfig);
+            lanDashboardServer?.UpdateSnapshot(DashboardSnapshotBuilder.Build(computer, raw, overlayConfig.RefreshIntervalMs));
 
             currentMetricValues.Clear();
             foreach (var pair in raw)
             {
-                currentMetricValues[pair.Key] = pair.Value;
+                currentMetricValues[pair.Key] = pair.Value.DisplayValue;
             }
 
             OverlayMetricCollector.ApplyRamOverlayFormatting(computer, overlayConfig, currentMetricValues);
@@ -977,7 +981,7 @@ namespace PCStatsTray
                 return;
             }
 
-            if (!overlayConfig.PhoneDashboardEnabled)
+            if (overlayConfig.DashboardAccess == DashboardAccessMode.Off)
             {
                 dashboardStatusItem.Text = "Dashboard: disabled";
                 return;

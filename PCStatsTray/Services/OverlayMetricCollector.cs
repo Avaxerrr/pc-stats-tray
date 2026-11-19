@@ -7,9 +7,16 @@ namespace PCStatsTray
 {
     internal static class OverlayMetricCollector
     {
-        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config, bool useOverlayDisplayModes = true)
+        public static Dictionary<string, string> Collect(Computer computer, OverlayConfig config)
         {
-            var currentValues = new Dictionary<string, string>();
+            return CollectReadings(computer, config, useOverlayDisplayModes: true)
+                .ToDictionary(pair => pair.Key, pair => pair.Value.DisplayValue);
+        }
+
+        internal static Dictionary<string, MetricReading> CollectReadings(
+            Computer computer, OverlayConfig config, bool useOverlayDisplayModes = false)
+        {
+            var currentValues = new Dictionary<string, MetricReading>();
             string selectedStorageSourceKey = config.StorageSourceKey?.Trim() ?? string.Empty;
             string selectedNetworkSourceKey = config.NetworkSourceKey?.Trim() ?? string.Empty;
             float? hottestStorageTemp = null;
@@ -110,66 +117,66 @@ namespace PCStatsTray
 
             if (matchedSelectedStorageSource && selectedStorageTemp.HasValue)
             {
-                currentValues["StorageTemp"] = $"{selectedStorageTemp.Value:0}°C";
+                currentValues["StorageTemp"] = MetricReading.Scalar(selectedStorageTemp.Value, "°C", "0");
             }
             else if (hottestStorageTemp.HasValue)
             {
-                currentValues["StorageTemp"] = $"{hottestStorageTemp.Value:0}°C";
+                currentValues["StorageTemp"] = MetricReading.Scalar(hottestStorageTemp.Value, "°C", "0");
             }
 
             if (matchedSelectedStorageSource && selectedStorageLoad.HasValue)
             {
-                currentValues["StorageLoad"] = $"{selectedStorageLoad.Value:0}%";
+                currentValues["StorageLoad"] = MetricReading.Scalar(selectedStorageLoad.Value, "%", "0");
             }
             else if (busiestStorageLoad.HasValue)
             {
-                currentValues["StorageLoad"] = $"{busiestStorageLoad.Value:0}%";
+                currentValues["StorageLoad"] = MetricReading.Scalar(busiestStorageLoad.Value, "%", "0");
             }
 
             if (matchedSelectedStorageSource && sawSelectedStorageRead)
             {
-                currentValues["StorageRead"] = FormatThroughput(selectedStorageReadBytes);
+                currentValues["StorageRead"] = ReadThroughput(selectedStorageReadBytes);
             }
             else if (sawStorageRead)
             {
-                currentValues["StorageRead"] = FormatThroughput(totalStorageReadBytes);
+                currentValues["StorageRead"] = ReadThroughput(totalStorageReadBytes);
             }
 
             if (matchedSelectedStorageSource && sawSelectedStorageWrite)
             {
-                currentValues["StorageWrite"] = FormatThroughput(selectedStorageWriteBytes);
+                currentValues["StorageWrite"] = ReadThroughput(selectedStorageWriteBytes);
             }
             else if (sawStorageWrite)
             {
-                currentValues["StorageWrite"] = FormatThroughput(totalStorageWriteBytes);
+                currentValues["StorageWrite"] = ReadThroughput(totalStorageWriteBytes);
             }
 
             if (matchedSelectedNetworkSource && sawSelectedNetworkDownload)
             {
-                currentValues["NetworkDownload"] = FormatThroughput(selectedNetworkDownloadBytes);
+                currentValues["NetworkDownload"] = ReadThroughput(selectedNetworkDownloadBytes);
             }
             else if (sawNetworkDownload)
             {
-                currentValues["NetworkDownload"] = FormatThroughput(totalNetworkDownloadBytes);
+                currentValues["NetworkDownload"] = ReadThroughput(totalNetworkDownloadBytes);
             }
 
             if (matchedSelectedNetworkSource && sawSelectedNetworkUpload)
             {
-                currentValues["NetworkUpload"] = FormatThroughput(selectedNetworkUploadBytes);
+                currentValues["NetworkUpload"] = ReadThroughput(selectedNetworkUploadBytes);
             }
             else if (sawNetworkUpload)
             {
-                currentValues["NetworkUpload"] = FormatThroughput(totalNetworkUploadBytes);
+                currentValues["NetworkUpload"] = ReadThroughput(totalNetworkUploadBytes);
             }
 
             if (batteryLevel.HasValue)
             {
-                currentValues["BatteryLevel"] = $"{batteryLevel.Value:0}%";
+                currentValues["BatteryLevel"] = MetricReading.Scalar(batteryLevel.Value, "%", "0");
             }
 
             if (batteryPower.HasValue)
             {
-                currentValues["BatteryPower"] = $"{batteryPower.Value:0.#} W";
+                currentValues["BatteryPower"] = MetricReading.Scalar(batteryPower.Value, "W", "0.#");
             }
 
             FanSensorResolver.PopulateFanMetrics(computer, config, currentValues);
@@ -198,12 +205,12 @@ namespace PCStatsTray
             return $"{usedGb:0.#} GB";
         }
 
-        private static void CollectCpuMetrics(IHardware hardware, IDictionary<string, string> currentValues)
+        private static void CollectCpuMetrics(IHardware hardware, IDictionary<string, MetricReading> currentValues)
         {
             var temp = SelectCpuTemperatureSensor(hardware.Sensors);
             if (temp?.Value.HasValue == true)
             {
-                currentValues["CpuTemp"] = $"{temp.Value.Value:0}°C";
+                currentValues["CpuTemp"] = MetricReading.Scalar(temp.Value.Value, "°C", "0");
             }
 
             var load = FindPreferredSensor(hardware.Sensors,
@@ -211,7 +218,7 @@ namespace PCStatsTray
                 "Total");
             if (load?.Value.HasValue == true)
             {
-                currentValues["CpuLoad"] = $"{load.Value.Value:0}%";
+                currentValues["CpuLoad"] = MetricReading.Scalar(load.Value.Value, "%", "0");
             }
 
             var peakClocks = hardware.Sensors
@@ -221,7 +228,7 @@ namespace PCStatsTray
                 .ToList();
             if (peakClocks.Count > 0)
             {
-                currentValues["CpuClock"] = $"{peakClocks.Max(sensor => sensor.Value!.Value):0} MHz";
+                currentValues["CpuClock"] = MetricReading.Scalar(peakClocks.Max(sensor => sensor.Value!.Value), "MHz", "0");
             }
 
             var averageClock = FindPreferredSensor(hardware.Sensors,
@@ -229,7 +236,7 @@ namespace PCStatsTray
                 "Cores (Average)");
             if (averageClock?.Value.HasValue == true)
             {
-                currentValues["CpuClockAvg"] = $"{averageClock.Value.Value:0} MHz";
+                currentValues["CpuClockAvg"] = MetricReading.Scalar(averageClock.Value.Value, "MHz", "0");
             }
 
             var effectiveAverageClock = FindPreferredSensor(hardware.Sensors,
@@ -237,7 +244,7 @@ namespace PCStatsTray
                 "Cores (Average Effective)");
             if (effectiveAverageClock?.Value.HasValue == true)
             {
-                currentValues["CpuClockEffectiveAvg"] = $"{effectiveAverageClock.Value.Value:0} MHz";
+                currentValues["CpuClockEffectiveAvg"] = MetricReading.Scalar(effectiveAverageClock.Value.Value, "MHz", "0");
             }
 
             var power = FindPreferredSensor(hardware.Sensors,
@@ -245,7 +252,7 @@ namespace PCStatsTray
                 "Package");
             if (power?.Value.HasValue == true)
             {
-                currentValues["CpuPower"] = $"{power.Value.Value:0.#} W";
+                currentValues["CpuPower"] = MetricReading.Scalar(power.Value.Value, "W", "0.#");
             }
         }
 
@@ -262,7 +269,7 @@ namespace PCStatsTray
             values["RamUsage"] = FormatRamUsage(usedGb, availableGb, showPercentage: true);
         }
 
-        private static void CollectGpuMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues)
+        private static void CollectGpuMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, MetricReading> currentValues)
         {
             var allSensors = hardware.Sensors
                 .Concat(hardware.SubHardware.SelectMany(sub => sub.Sensors))
@@ -273,7 +280,7 @@ namespace PCStatsTray
                 "Core");
             if (temp?.Value.HasValue == true)
             {
-                currentValues["GpuTemp"] = $"{temp.Value.Value:0}°C";
+                currentValues["GpuTemp"] = MetricReading.Scalar(temp.Value.Value, "°C", "0");
             }
 
             var hotspotTemp = FindPreferredSensor(allSensors,
@@ -283,7 +290,7 @@ namespace PCStatsTray
                 "Junction");
             if (hotspotTemp?.Value.HasValue == true)
             {
-                currentValues["GpuHotspotTemp"] = $"{hotspotTemp.Value.Value:0}°C";
+                currentValues["GpuHotspotTemp"] = MetricReading.Scalar(hotspotTemp.Value.Value, "°C", "0");
             }
 
             var memoryTemp = FindPreferredSensor(allSensors,
@@ -291,7 +298,7 @@ namespace PCStatsTray
                 "Memory");
             if (memoryTemp?.Value.HasValue == true)
             {
-                currentValues["GpuMemoryTemp"] = $"{memoryTemp.Value.Value:0}°C";
+                currentValues["GpuMemoryTemp"] = MetricReading.Scalar(memoryTemp.Value.Value, "°C", "0");
             }
 
             var load = FindPreferredSensor(allSensors,
@@ -299,7 +306,7 @@ namespace PCStatsTray
                 "Core");
             if (load?.Value.HasValue == true)
             {
-                currentValues["GpuLoad"] = $"{load.Value.Value:0}%";
+                currentValues["GpuLoad"] = MetricReading.Scalar(load.Value.Value, "%", "0");
             }
 
             var coreClock = FindPreferredSensor(allSensors,
@@ -307,7 +314,7 @@ namespace PCStatsTray
                 "Core");
             if (coreClock?.Value.HasValue == true)
             {
-                currentValues["GpuClock"] = $"{coreClock.Value.Value:0} MHz";
+                currentValues["GpuClock"] = MetricReading.Scalar(coreClock.Value.Value, "MHz", "0");
             }
 
             var memoryClock = FindPreferredSensor(allSensors,
@@ -315,7 +322,7 @@ namespace PCStatsTray
                 "Memory");
             if (memoryClock?.Value.HasValue == true)
             {
-                currentValues["GpuMemoryClock"] = $"{memoryClock.Value.Value:0} MHz";
+                currentValues["GpuMemoryClock"] = MetricReading.Scalar(memoryClock.Value.Value, "MHz", "0");
             }
 
             var vramUsed = FindPreferredSensor(allSensors,
@@ -330,17 +337,19 @@ namespace PCStatsTray
             {
                 float usedMb = vramUsed.Value.Value;
                 float? totalMb = vramTotal?.Value.HasValue == true ? vramTotal.Value.Value : null;
-                currentValues["GpuVram"] = FormatVramUsage(usedMb, totalMb, config.ShowVramAsPercentage());
+                currentValues["GpuVram"] = new MetricReading(
+                    FormatVramUsage(usedMb, totalMb, config.ShowVramAsPercentage()),
+                    usedMb / 1024f, "GB", totalMb / 1024f);
             }
 
             var power = SelectGpuPowerSensor(allSensors);
             if (power?.Value.HasValue == true)
             {
-                currentValues["GpuPower"] = $"{power.Value.Value:0.#} W";
+                currentValues["GpuPower"] = MetricReading.Scalar(power.Value.Value, "W", "0.#");
             }
         }
 
-        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, string> currentValues, bool useOverlayDisplayModes)
+        private static void CollectRamMetrics(IHardware hardware, OverlayConfig config, IDictionary<string, MetricReading> currentValues, bool useOverlayDisplayModes)
         {
             var used = FindPreferredSensor(hardware.Sensors,
                 SensorType.Data,
@@ -356,15 +365,17 @@ namespace PCStatsTray
             float usedGb = used.Value!.Value;
             float? availableGb = available?.Value.HasValue == true ? available.Value.Value : null;
             bool showRamAsPercentage = useOverlayDisplayModes && config.ShowRamAsPercentage();
-            currentValues["RamUsage"] = FormatRamUsage(usedGb, availableGb, showRamAsPercentage);
+            currentValues["RamUsage"] = new MetricReading(
+                FormatRamUsage(usedGb, availableGb, showRamAsPercentage),
+                usedGb, "GB", usedGb + availableGb);
 
             if (availableGb.HasValue)
             {
-                currentValues["RamAvailable"] = $"{availableGb.Value:0.#} GB";
+                currentValues["RamAvailable"] = MetricReading.Scalar(availableGb.Value, "GB", "0.#");
                 float totalGb = usedGb + availableGb.Value;
                 if (totalGb > 0)
                 {
-                    currentValues["RamLoad"] = $"{(usedGb / totalGb) * 100f:0}%";
+                    currentValues["RamLoad"] = MetricReading.Scalar((usedGb / totalGb) * 100f, "%", "0");
                 }
             }
             else
@@ -374,7 +385,7 @@ namespace PCStatsTray
                     "Memory");
                 if (load?.Value.HasValue == true)
                 {
-                    currentValues["RamLoad"] = $"{load.Value.Value:0}%";
+                    currentValues["RamLoad"] = MetricReading.Scalar(load.Value.Value, "%", "0");
                 }
             }
         }
@@ -706,6 +717,9 @@ namespace PCStatsTray
 
             return 50;
         }
+
+        internal static MetricReading ReadThroughput(double bytesPerSecond) =>
+            new(FormatThroughput(bytesPerSecond), bytesPerSecond, "B/s");
 
         private static string FormatThroughput(double bytesPerSecond)
         {
