@@ -209,7 +209,7 @@ namespace PCStatsTray
             {
                 (DashboardAccessMode.Off, "Off"),
                 (DashboardAccessMode.ThisPcOnly, "Local apps"),
-                (DashboardAccessMode.LocalNetwork, "Dashboard")
+                (DashboardAccessMode.LocalNetwork, "Apps + Dashboard")
             })
             {
                 var item = new ToolStripMenuItem(label) { Checked = overlayConfig.DashboardAccess == mode };

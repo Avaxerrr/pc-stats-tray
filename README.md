@@ -81,15 +81,15 @@ If you only want the LAN dashboard, you also do not need RTSS.
 
 ## Dashboard and metrics API
 
-In PC Stats Tray 0.7.1, the tray menu offers three **Show Stats** options:
+In PC Stats Tray 0.7.2, the tray menu offers three **Show Stats** options:
 
 - **Off** is the default for new installations. The desktop and RTSS overlays still work.
 - **Local apps** serves the dashboard and metrics API on `127.0.0.1` so other apps on the PC can read the stats.
-- **Dashboard** also allows devices that can reach the PC over the network to open the dashboard or read its API without signing in. Use this on trusted networks.
+- **Apps + Dashboard** also allows devices that can reach the PC over the network to open the dashboard or read its API without signing in. Use this on trusted networks.
 
-The old **Enable LAN Dashboard** setting migrates to **Dashboard** when enabled and **Off** when disabled. **Open Dashboard** opens it locally. **Copy Dashboard URL** copies the network address in **Dashboard** mode when one is available.
+The old **Enable LAN Dashboard** setting migrates to **Apps + Dashboard** when enabled and **Off** when disabled. **Open Dashboard** opens it locally. **Copy Dashboard URL** copies the network address in **Apps + Dashboard** mode when one is available.
 
-The default port is `4587`. Use `http://127.0.0.1:4587/` on the PC, or the copied URL on another device when **Dashboard** is enabled.
+The default port is `4587`. Use `http://127.0.0.1:4587/` on the PC, or the copied URL on another device when **Apps + Dashboard** is enabled.
 
 | Path | Response |
 | --- | --- |
