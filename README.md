@@ -15,14 +15,13 @@ PC Stats Tray is a small Windows app that shows hardware stats in simple places 
 
 If you want a lightweight monitor instead of a big dashboard always open, this is what the app is for.
 
-## What's new in 0.5.0
+## What's new in 0.7.2
 
-- local LAN dashboard for phone and browser viewing
-- read-only local metrics API
-- richer curated dashboard metric catalog, separate from the desktop OSD metric list
-- dynamic OSD margin range based on monitor size, DPI, and overlay size
-- safer default hotkeys with fewer common shortcut conflicts
-- persistent sensor details window size, position, and sidebar split
+This README covers **0.7.2**. The published **0.6.0** build uses **Enable LAN Dashboard**. [Download the latest published executable](https://github.com/Avaxerrr/pc-stats-tray/releases/latest)
+
+- **Show Stats** lets you choose **Off**, **Local apps** for TapMyPC and other apps on this PC, or **Apps + Dashboard** to add browser access from devices on your network.
+- The dashboard and local apps share a cached metrics API. It includes display values, numeric readings, units, and the dashboard's default-view selection.
+- The dashboard shows individual drives and network adapters, with separate average, peak, and effective CPU clock readings. The desktop and RTSS overlays let you choose the drive or adapter to display.
 
 ## What it looks like
 
@@ -76,7 +75,7 @@ If you only want the LAN dashboard, you also do not need RTSS.
 6. Choose the metrics you want.
 7. Turn on `Desktop OSD` if you want stats on your desktop.
 8. Turn on `RTSS OSD (Games)` only if RTSS is installed and open.
-9. Choose a mode under **Show Stats** in the tray menu.
+9. Choose a mode under **Show Stats** in the tray menu. On 0.6.0, use **Enable LAN Dashboard** for browser access.
 10. Changes apply immediately.
 
 ## Dashboard and metrics API
